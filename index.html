@@ -1,0 +1,1926 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0A7CFF">
+<title>Messenger — redesigned (working prototype)</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root{
+  --blue:#0A7CFF;--blue-wash:rgba(10,124,255,.10);
+  --surface:#fff;--variant:#F0F2F5;--variant-2:#E4E6EB;--in:#E9EBEF;
+  --ink:#080809;--ink-2:#3C4043;--muted:#6E7379;--rule:#E3E5E9;
+  --scrim:rgba(8,8,9,.45);--shadow:0 -10px 34px rgba(8,8,9,.15);
+  --ok:#1B7F4B;--warn:#C2410C;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root{
+  --surface:#101114;--variant:#1C1E22;--variant-2:#282B31;--in:#26292F;
+  --ink:#F2F3F5;--ink-2:#D4D7DC;--muted:#9AA0A8;--rule:#26292F;
+  --shadow:0 -10px 34px rgba(0,0,0,.55);}}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{font:15px/1.45 var(--sans);color:var(--ink);background:#0B0C0F;
+  display:grid;place-items:center;overflow:hidden}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+input,textarea{font:inherit;color:inherit}
+
+#app{width:100%;max-width:420px;height:100%;background:var(--surface);
+  position:relative;overflow:hidden;display:flex;flex-direction:column}
+@media(min-width:520px) and (min-height:740px){
+  body{background:radial-gradient(120% 90% at 50% 0%,#20242C,#0B0C0F)}
+  #app{height:830px;max-height:95vh;border-radius:38px;border:11px solid #17191E;
+    box-shadow:0 40px 90px -30px rgba(0,0,0,.9)}
+  #notch{position:absolute;top:0;left:50%;transform:translateX(-50%);width:120px;height:22px;
+    background:#17191E;border-radius:0 0 15px 15px;z-index:90}
+}
+@media not all and (min-width:520px) and (min-height:740px){#notch{display:none}}
+
+/* ── screens ── */
+.screen{position:absolute;inset:0;background:var(--surface);display:flex;flex-direction:column;
+  transform:translateX(100%);transition:transform .26s cubic-bezier(.32,.94,.28,1);z-index:10}
+.screen.on{transform:translateX(0)}
+.screen.base{transform:translateX(0);z-index:5}
+.screen.base.pushed{transform:translateX(-24%);filter:brightness(.92)}
+
+/* ── bars ── */
+.top{display:flex;align-items:center;gap:6px;flex-shrink:0;background:var(--surface);
+  padding:max(10px,env(safe-area-inset-top)) 6px 8px;border-bottom:1px solid var(--rule);z-index:20}
+.top h1{flex:1;font-size:20px;font-weight:700;letter-spacing:-.02em;padding-left:8px}
+.iconbtn{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;
+  color:var(--blue);flex-shrink:0}
+.iconbtn:hover{background:var(--variant)}
+.iconbtn:disabled{opacity:.35;cursor:default}
+.ic{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.85;
+  stroke-linecap:round;stroke-linejoin:round}
+.avatar{width:34px;height:34px;border-radius:50%;flex-shrink:0;display:grid;place-items:center;
+  color:#fff;font-weight:600;font-size:12.5px}
+.peer{flex:1;min-width:0;line-height:1.2}
+.peer .nm{font-size:15px;font-weight:600;letter-spacing:-.01em;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.peer .st{font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:5px}
+.peer .st::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--ok)}
+
+/* ── conversation list ── */
+.search{margin:8px 12px 4px;background:var(--variant);border-radius:20px;display:flex;
+  align-items:center;gap:8px;padding:9px 14px;color:var(--muted)}
+.search input{flex:1;border:0;background:none;outline:none;font-size:14.5px}
+.convs{flex:1;overflow-y:auto;padding-bottom:12px}
+.conv{display:flex;align-items:center;gap:12px;width:100%;padding:10px 14px;text-align:left}
+.conv:hover{background:var(--variant)}
+.conv .avatar{width:52px;height:52px;font-size:16px}
+.conv .cx{flex:1;min-width:0}
+.conv .cn{display:block;font-size:15.5px;font-weight:500;letter-spacing:-.01em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.conv.unread .cn{font-weight:700}
+.conv .cp{display:block;font-size:13.5px;color:var(--muted);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;margin-top:2px}
+.conv.unread .cp{color:var(--ink);font-weight:600}
+.conv .ct{font-size:12px;color:var(--muted);flex-shrink:0}
+.conv.unread .ct{color:var(--blue);font-weight:600}
+.conv .rt{display:flex;align-items:center;gap:9px;flex-shrink:0}
+.conv .cpwrap{display:flex;align-items:center;gap:6px}
+.conv .cpwrap .cp{flex:1;min-width:0}
+.conv .dot{width:9px;height:9px;border-radius:50%;background:var(--blue);flex-shrink:0}
+
+/* ── thread ── */
+.thread{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:12px 12px 8px;
+  display:flex;flex-direction:column;-webkit-overflow-scrolling:touch}
+.day{align-self:center;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.05em;
+  text-transform:uppercase;padding:6px 0 14px}
+.row{display:flex;flex-direction:column;max-width:80%}
+.row.me{align-self:flex-end;align-items:flex-end}
+.row.them{align-self:flex-start;align-items:flex-start}
+.row+.row{margin-top:9px}
+.bub{padding:9px 14px;font-size:15px;border-radius:20px;word-wrap:break-word;line-height:1.35}
+.me .bub{background:var(--blue);color:#fff;border-bottom-right-radius:6px}
+.them .bub{background:var(--in);color:var(--ink);border-bottom-left-radius:6px}
+.pic{border-radius:18px;overflow:hidden;max-width:216px;line-height:0;background:var(--variant)}
+.pic img{width:100%;display:block}
+.pic .fake{width:186px;height:186px}
+.receipt{font-size:10.5px;color:var(--muted);padding:4px 4px 0}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:18px;overflow:hidden;
+  width:236px;max-width:100%}
+.me .card{border-bottom-right-radius:6px}
+.card .ch{padding:11px 14px 9px;font-size:14px;font-weight:600;border-bottom:1px solid var(--rule)}
+.card .cb{padding:10px 14px 13px}
+.stick{font-size:64px;line-height:1;padding:2px}
+.gifbub{width:190px;height:120px;border-radius:18px;position:relative;overflow:hidden;
+  background-size:300% 300%;animation:gifmove 3s linear infinite}
+@keyframes gifmove{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+.gifbub b{position:absolute;left:7px;bottom:6px;font-size:9px;letter-spacing:.1em;color:#fff;
+  background:rgba(0,0,0,.45);padding:2px 5px;border-radius:4px}
+.poll .opt{display:flex;align-items:center;gap:9px;width:100%;padding:8px 0;text-align:left;
+  font-size:13.5px;position:relative}
+.poll .bar{position:absolute;left:0;top:4px;bottom:4px;background:var(--blue-wash);border-radius:6px;
+  transition:width .3s;z-index:0}
+.poll .ol{flex:1;z-index:1}
+.poll .ov{font-size:12px;color:var(--muted);z-index:1;font-variant-numeric:tabular-nums}
+.poll .box{width:17px;height:17px;border-radius:50%;border:1.8px solid var(--muted);z-index:1;
+  flex-shrink:0;display:grid;place-items:center;font-size:10px;color:#fff}
+.poll .voted .box{background:var(--blue);border-color:var(--blue)}
+.map{height:118px;background:
+  repeating-linear-gradient(90deg,var(--variant) 0 22px,transparent 22px 23px),
+  repeating-linear-gradient(0deg,var(--variant) 0 22px,transparent 22px 23px),
+  linear-gradient(160deg,#CFE3D0,#AFD3E8);position:relative}
+.map .pin{position:absolute;left:50%;top:50%;transform:translate(-50%,-100%);font-size:24px}
+.filerow{display:flex;align-items:center;gap:11px;padding:12px 14px}
+.filerow .fi{width:36px;height:36px;border-radius:9px;background:var(--variant);display:grid;
+  place-items:center;color:var(--muted);flex-shrink:0}
+.filerow .fn{flex:1;min-width:0;font-size:13.5px;font-weight:600;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.filerow .fs{font-size:11.5px;color:var(--muted);font-weight:400}
+.money{padding:16px 14px;text-align:center;background:linear-gradient(140deg,#0A7CFF,#0B4FCB);color:#fff}
+.money .amt{font-size:30px;font-weight:700;letter-spacing:-.02em}
+.money .lb{font-size:11.5px;opacity:.85;margin-top:2px}
+.voice{display:flex;align-items:center;gap:10px;padding:9px 14px}
+.me .voice{background:var(--blue);color:#fff;border-radius:20px;border-bottom-right-radius:6px}
+.wave{display:flex;align-items:center;gap:2px;height:22px}
+.wave i{width:2.5px;border-radius:2px;background:currentColor;opacity:.75}
+.typing{display:flex;gap:4px;padding:13px 16px;background:var(--in);border-radius:20px;
+  border-bottom-left-radius:6px;align-self:flex-start;margin-top:9px}
+.typing i{width:7px;height:7px;border-radius:50%;background:var(--muted);animation:bob 1.1s infinite}
+.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+@keyframes bob{0%,60%,100%{opacity:.35;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}
+
+/* ── recents strip ── */
+.strip{flex-shrink:0;background:var(--variant);border-top:1px solid var(--rule);
+  transition:height .22s ease,opacity .18s;overflow:hidden;height:92px}
+.strip[data-state="off"]{height:0;opacity:0;border-top-width:0}
+.strip[data-state="peek"]{height:34px}
+.striptop{display:flex;align-items:center;gap:8px;height:34px;padding:0 12px 0 14px}
+.striptop .lab{flex:1;font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--muted)}
+.striptop .lab.hot{color:var(--blue)}
+.striptop .mini{font-size:12px;color:var(--muted);padding:4px 6px;border-radius:6px}
+.striptop .mini:hover{background:var(--variant-2)}
+.chev{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;
+  stroke-linejoin:round;transition:transform .22s}
+.strip[data-state="peek"] .chev{transform:rotate(180deg)}
+.rail{display:flex;gap:7px;overflow-x:auto;padding:0 12px 12px;scrollbar-width:none}
+.rail::-webkit-scrollbar{display:none}
+.tile{width:64px;height:64px;border-radius:14px;flex-shrink:0;position:relative;overflow:hidden;
+  background:var(--variant-2);transition:transform .11s}
+.tile:active{transform:scale(.94)}
+.tile img{width:100%;height:100%;object-fit:cover;display:block}
+.tile .age{position:absolute;left:0;right:0;bottom:0;padding:13px 5px 4px;font-size:9.5px;
+  font-weight:600;color:#fff;text-align:left;background:linear-gradient(transparent,rgba(0,0,0,.6))}
+.tile .ring{position:absolute;inset:0;border-radius:14px;box-shadow:inset 0 0 0 3px var(--blue);
+  opacity:0;transition:opacity .12s}
+.tile[aria-pressed="true"] .ring{opacity:1}
+.tile .tick{position:absolute;top:5px;right:5px;width:19px;height:19px;border-radius:50%;
+  background:var(--blue);color:#fff;font-size:11px;display:grid;place-items:center;
+  box-shadow:0 0 0 2px var(--variant);transform:scale(0);
+  transition:transform .14s cubic-bezier(.3,1.4,.5,1)}
+.tile[aria-pressed="true"] .tick{transform:scale(1)}
+.railact{width:64px;height:64px;border-radius:14px;flex-shrink:0;background:var(--surface);
+  border:1px solid var(--rule);display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:5px;font-size:9.5px;font-weight:500;color:var(--muted)}
+.railact .ic{width:19px;height:19px}
+
+/* ── composer ── */
+.composer{display:flex;align-items:center;gap:2px;flex-shrink:0;background:var(--surface);
+  padding:7px 6px max(7px,env(safe-area-inset-bottom));border-top:1px solid var(--rule)}
+.field{flex:1;display:flex;align-items:center;background:var(--variant);border-radius:22px;min-width:0}
+.field input{flex:1;border:0;background:none;outline:none;padding:11px 4px 11px 15px;font-size:15px;min-width:0}
+.send{color:var(--blue);transform:scale(.85);opacity:.4;pointer-events:none;
+  transition:transform .16s,opacity .16s}
+.send.live{transform:scale(1);opacity:1;pointer-events:auto}
+.sendwrap{position:relative}
+.countpip{position:absolute;top:1px;right:1px;min-width:17px;height:17px;padding:0 4px;
+  border-radius:9px;background:var(--blue);color:#fff;font-size:10.5px;font-weight:700;
+  display:grid;place-items:center;border:2px solid var(--surface)}
+.rec{position:absolute;inset:0;background:var(--surface);display:none;align-items:center;
+  gap:12px;padding:0 18px;z-index:5}
+.rec.on{display:flex}
+.rec .blip{width:10px;height:10px;border-radius:50%;background:#E0245E;animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.25}}
+.rec .tm{font:600 15px var(--mono);flex:1}
+
+/* ── sheets ── */
+.scrim{position:absolute;inset:0;background:var(--scrim);z-index:60;opacity:0;pointer-events:none;
+  transition:opacity .22s}
+.scrim.on{opacity:1;pointer-events:auto}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:70;background:var(--surface);
+  border-radius:20px 20px 0 0;box-shadow:var(--shadow);transform:translateY(102%);
+  transition:transform .28s cubic-bezier(.32,.94,.28,1);
+  padding:8px 0 max(14px,env(safe-area-inset-bottom));max-height:86%;
+  display:flex;flex-direction:column}
+.sheet.up{transform:translateY(0)}
+.grip{width:38px;height:4px;border-radius:2px;background:var(--variant-2);margin:2px auto 12px;flex-shrink:0}
+.sheet h3{font-size:11px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--muted);padding:0 20px 9px;flex-shrink:0}
+.quick{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;padding:0 16px 16px;flex-shrink:0}
+.qbtn{background:var(--variant);border-radius:16px;padding:15px 8px 12px;display:flex;
+  flex-direction:column;align-items:center;gap:8px;font-size:12.5px;font-weight:600;
+  transition:background .13s,transform .11s}
+.qbtn:active{transform:scale(.97)}
+.qbtn:hover{background:var(--variant-2)}
+.qbtn .ic{width:25px;height:25px;color:var(--blue)}
+.qbtn small{font-size:10.5px;font-weight:500;color:var(--muted);margin-top:-4px}
+.rest{border-top:1px solid var(--rule);padding-top:6px;overflow-y:auto}
+.rrow{display:flex;align-items:center;gap:14px;width:100%;padding:11px 20px;text-align:left}
+.rrow:hover{background:var(--variant)}
+.rrow .ic{width:21px;height:21px;color:var(--ink-2);flex-shrink:0}
+.rrow .t{flex:1;font-size:15px}
+.rrow .t small{display:block;font-size:12px;color:var(--muted);margin-top:1px}
+.rrow .arw{width:16px;height:16px;color:var(--muted);fill:none;stroke:currentColor;stroke-width:2;
+  stroke-linecap:round;stroke-linejoin:round}
+
+.pad{padding:0 20px 16px;overflow-y:auto}
+.pad label{display:block;font-size:11.5px;font-weight:600;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--muted);margin:12px 0 6px}
+.pad input[type=text]{width:100%;background:var(--variant);border:0;border-radius:12px;
+  padding:11px 14px;outline:none;font-size:15px}
+.pad input[type=text]:focus{box-shadow:inset 0 0 0 2px var(--blue)}
+.cta{width:100%;background:var(--blue);color:#fff;border-radius:13px;padding:13px;
+  font-size:15px;font-weight:600;margin-top:16px}
+.cta:disabled{background:var(--variant-2);color:var(--muted);cursor:default}
+.ghost{width:100%;padding:11px;font-size:14px;color:var(--muted);margin-top:4px}
+.emojis,.stickers{display:grid;gap:4px;padding:0 14px 10px;overflow-y:auto}
+.emojis{grid-template-columns:repeat(8,1fr)}
+.stickers{grid-template-columns:repeat(4,1fr)}
+.emojis button{font-size:26px;padding:6px 0;border-radius:10px;line-height:1}
+.stickers button{font-size:44px;padding:9px 0;border-radius:14px;line-height:1;background:var(--variant)}
+.emojis button:hover,.stickers button:hover{background:var(--variant-2)}
+.gifs{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:0 14px 10px;overflow-y:auto}
+.gifs button{height:96px;border-radius:12px;background-size:300% 300%;
+  animation:gifmove 3s linear infinite;position:relative}
+.gifs button b{position:absolute;left:6px;bottom:5px;font-size:9.5px;color:#fff;
+  background:rgba(0,0,0,.45);padding:2px 5px;border-radius:4px;letter-spacing:.06em}
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:4px 20px 0}
+.keypad button{padding:14px 0;font-size:20px;font-weight:600;border-radius:12px;background:var(--variant)}
+.keypad button:hover{background:var(--variant-2)}
+.amtview{text-align:center;font-size:40px;font-weight:700;letter-spacing:-.03em;padding:6px 0 2px}
+.amtview span{color:var(--muted);font-size:24px;font-weight:600}
+.setrow{display:flex;align-items:flex-start;gap:14px;padding:13px 20px}
+.setrow+.setrow{border-top:1px solid var(--rule)}
+.setrow .t{flex:1;font-size:15px}
+.setrow .t small{display:block;font-size:12.5px;color:var(--muted);margin-top:3px;line-height:1.4}
+.toggle{width:47px;height:28px;border-radius:15px;background:var(--variant-2);position:relative;
+  flex-shrink:0;transition:background .18s;margin-top:2px}
+.toggle::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;
+  background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .18s}
+.toggle[aria-checked="true"]{background:var(--blue)}
+.toggle[aria-checked="true"]::after{transform:translateX(19px)}
+
+/* ── call screen ── */
+#call{background:linear-gradient(165deg,#1B2735,#0B1119);color:#fff;align-items:center;
+  justify-content:space-between;padding:0}
+#call .cwho{text-align:center;margin-top:16vh}
+#call .cav{width:104px;height:104px;border-radius:50%;margin:0 auto 18px;display:grid;
+  place-items:center;font-size:34px;font-weight:600;color:#fff}
+#call .cn{font-size:25px;font-weight:600;letter-spacing:-.02em}
+#call .cs{font-size:14px;opacity:.7;margin-top:6px;font-variant-numeric:tabular-nums}
+#call .ctrl{display:flex;gap:16px;padding-bottom:12vh}
+#call .cbtn{width:60px;height:60px;border-radius:50%;background:rgba(255,255,255,.14);
+  display:grid;place-items:center;color:#fff}
+#call .cbtn.on{background:#fff;color:#1B2735}
+#call .cbtn.end{background:#E0245E}
+#call .cbtn .ic{width:25px;height:25px}
+
+/* ── per-message actions ── */
+.row{position:relative}
+.mwrap{display:flex;align-items:center;gap:2px}
+.me .mwrap{flex-direction:row}
+.them .mwrap{flex-direction:row-reverse}
+.dots{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;color:var(--muted);
+  flex-shrink:0;opacity:0;transition:opacity .14s,background .14s}
+.row:hover .dots,.dots:focus-visible{opacity:1}
+.dots:hover{background:var(--variant)}
+.dots svg{width:17px;height:17px;fill:currentColor}
+@media(pointer:coarse){.dots{opacity:.45}}
+.gone{background:transparent!important;border:1px dashed var(--rule);color:var(--muted)!important;
+  font-style:italic;font-size:13.5px;padding:8px 13px;border-radius:16px}
+.msgmenu .rrow .ic{width:20px;height:20px}
+.msgmenu .danger,.msgmenu .danger .ic{color:#E0245E}
+.msgpreview{margin:0 20px 10px;padding:10px 13px;background:var(--variant);border-radius:12px;
+  font-size:13px;color:var(--muted);max-height:60px;overflow:hidden;line-height:1.4}
+.camstage{position:relative;margin:0 14px;border-radius:16px;overflow:hidden;background:#0B0C0F;
+  aspect-ratio:3/4;max-height:44vh}
+.camstage video{width:100%;height:100%;object-fit:cover;display:block}
+.camstage video.mirror{transform:scaleX(-1)}
+.camerr{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:22px;
+  font-size:13px;line-height:1.5;color:#C9CDD3;background:#15171C}
+.camerr b{display:block;color:#fff;margin-bottom:6px;font-size:14px}
+.camerr code{font-family:var(--mono);font-size:11.5px;background:rgba(255,255,255,.1);
+  padding:2px 6px;border-radius:5px;display:inline-block;margin-top:8px}
+.camctrl{display:flex;align-items:center;justify-content:space-between;padding:14px 20px 4px}
+.shutter{width:62px;height:62px;border-radius:50%;background:#fff;
+  box-shadow:0 0 0 4px var(--surface),0 0 0 6px var(--blue);flex-shrink:0;transition:transform .1s}
+.shutter:active{transform:scale(.92)}
+.shutter:disabled{background:var(--variant-2);box-shadow:0 0 0 4px var(--surface),0 0 0 6px var(--variant-2);
+  cursor:default}
+.flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+.flash.go{animation:fl .32s ease-out}
+@keyframes fl{0%{opacity:.9}100%{opacity:0}}
+.gamelist{display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:0 16px 8px;overflow-y:auto}
+.gcard{background:var(--variant);border-radius:16px;padding:14px 12px;text-align:left;
+  display:flex;flex-direction:column;gap:3px;transition:background .13s,transform .11s}
+.gcard:active{transform:scale(.97)}
+.gcard:hover{background:var(--variant-2)}
+.gcard .gi{font-size:26px;line-height:1;margin-bottom:4px}
+.gcard .gn{font-size:14px;font-weight:600}
+.gcard .gd{font-size:11.5px;color:var(--muted);line-height:1.35}
+.gwrap{padding:0 20px;overflow-y:auto}
+.ttt{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;max-width:280px;margin:0 auto}
+.ttt button{aspect-ratio:1;background:var(--variant);border-radius:14px;font-size:34px;
+  font-weight:700;display:grid;place-items:center;line-height:1}
+.ttt button:disabled{cursor:default}
+.c4{background:var(--blue);border-radius:14px;padding:7px;display:grid;
+  grid-template-columns:repeat(7,1fr);gap:5px;max-width:300px;margin:0 auto}
+.c4 button{aspect-ratio:1;border-radius:50%;background:var(--surface);display:grid;place-items:center}
+.c4 button .d{width:100%;height:100%;border-radius:50%}
+.c4 .p1{background:#F5C518}.c4 .p2{background:#E0245E}
+.mem{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;max-width:290px;margin:0 auto}
+.mem button{aspect-ratio:1;border-radius:13px;background:var(--blue);font-size:26px;
+  display:grid;place-items:center;line-height:1;transition:background .18s}
+.mem button.up{background:var(--variant)}
+.mem button.done{background:rgba(27,127,75,.15);cursor:default}
+.rps{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:290px;margin:0 auto}
+.rps button{background:var(--variant);border-radius:16px;padding:16px 0;font-size:34px;line-height:1}
+.rps button:hover{background:var(--variant-2)}
+.rpsview{display:flex;align-items:center;justify-content:center;gap:22px;font-size:44px;
+  padding:6px 0 2px;min-height:62px}
+.rpsview small{font-size:12px;color:var(--muted);display:block;text-align:center;
+  font-weight:600;letter-spacing:.08em}
+.score{display:flex;justify-content:center;gap:18px;font:600 13px var(--mono);color:var(--muted);padding-top:8px}
+.gstat{text-align:center;font-size:14px;color:var(--muted);padding:12px 20px 2px;min-height:22px}
+.gbar{display:flex;align-items:center;gap:6px;padding:0 14px 6px}
+.gbar .gt{flex:1;font-size:15px;font-weight:600}
+
+/* ── maps ── */
+.mapbox{height:210px;border-radius:14px;overflow:hidden;background:var(--variant);position:relative}
+.mapbox .crosshair{position:absolute;left:50%;top:50%;transform:translate(-50%,-100%);
+  font-size:30px;z-index:500;pointer-events:none;filter:drop-shadow(0 2px 3px rgba(0,0,0,.35))}
+.mapbox .nomap{position:absolute;inset:0;display:grid;place-items:center;text-align:center;
+  padding:20px;font-size:13px;color:var(--muted);z-index:400}
+.maprow{display:flex;gap:8px;margin-top:10px}
+.maprow button{flex:1;background:var(--variant);border-radius:12px;padding:10px;font-size:13px;
+  font-weight:600;display:flex;align-items:center;justify-content:center;gap:7px}
+.maprow button:hover{background:var(--variant-2)}
+.maprow .ic{width:17px;height:17px}
+.bubmap{height:130px;width:236px;background:var(--variant)}
+.leaflet-container{font:inherit}
+
+/* ── stickers ── */
+.stktabs{display:flex;gap:6px;padding:0 16px 10px;overflow-x:auto;scrollbar-width:none;flex-shrink:0}
+.stktabs::-webkit-scrollbar{display:none}
+.stktabs button{flex-shrink:0;padding:7px 13px;border-radius:16px;background:var(--variant);
+  font-size:12.5px;font-weight:600;color:var(--muted)}
+.stktabs button.on{background:var(--blue);color:#fff}
+.txtstick{background:var(--variant);border-radius:14px;font-size:14px!important;font-weight:700;
+  padding:14px 6px!important;line-height:1.2;letter-spacing:-.01em}
+
+/* ── gcash / payment ── */
+.qrcard{width:238px;background:var(--surface);border:1px solid var(--rule);border-radius:18px;overflow:hidden}
+.me .qrcard{border-bottom-right-radius:6px}
+.qrcard .qh{background:linear-gradient(140deg,#0A7CFF,#0B4FCB);color:#fff;padding:13px 14px}
+.qrcard .qamt{font-size:27px;font-weight:700;letter-spacing:-.02em}
+.qrcard .qlb{font-size:11px;opacity:.9;letter-spacing:.06em;text-transform:uppercase;margin-top:1px}
+.qrcard .qimg{padding:12px;display:grid;place-items:center;background:#fff}
+.qrcard .qimg img{width:100%;max-width:186px;display:block;border-radius:8px}
+.qrcard .qnote{padding:0 14px 10px;font-size:12.5px;color:var(--muted)}
+.qrcard .qact{display:flex;border-top:1px solid var(--rule)}
+.qrcard .qact button,.qrcard .qact a{flex:1;padding:11px;font-size:13px;font-weight:600;
+  color:var(--blue);text-align:center;text-decoration:none;display:block}
+.qrcard .qact button+a,.qrcard .qact button+button{border-left:1px solid var(--rule)}
+.qempty{margin:0 20px 4px;padding:13px 14px;background:var(--variant);border-radius:13px;
+  font-size:13px;color:var(--muted);line-height:1.45}
+.qempty b{color:var(--ink);display:block;margin-bottom:3px;font-size:13.5px}
+.warnbar{margin:0 20px 10px;padding:10px 13px;border-radius:11px;font-size:12px;line-height:1.45;
+  background:rgba(194,65,12,.12);color:var(--warn)}
+.qrthumb{width:44px;height:44px;border-radius:9px;object-fit:cover;background:#fff}
+
+/* ── file bubbles ── */
+.filerow.link{cursor:pointer}
+.filerow.link:hover{background:var(--variant)}
+.fileopen{font-size:11.5px;color:var(--blue);font-weight:600;padding:0 14px 11px}
+
+/* ── blueprint screen ── */
+#blue{background:var(--surface)}
+.bp{flex:1;overflow-y:auto;padding:18px 18px 44px}
+.bp h2{font-size:19px;font-weight:700;letter-spacing:-.02em;margin-bottom:5px}
+.bp .sub{font-size:13px;color:var(--muted);margin-bottom:6px}
+.bpsec{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);
+  border-bottom:1px solid var(--rule);padding-bottom:7px;margin:26px 0 12px}
+.bp p{font-size:14.5px;color:var(--ink-2);line-height:1.55;margin-bottom:12px}
+.bp b{color:var(--ink);font-weight:600}
+.bp svg.plan{width:100%;height:auto;display:block;background:var(--variant);border:1px solid var(--rule);
+  border-radius:12px}
+.bpcap{font-size:12px;color:var(--muted);margin:7px 0 18px;line-height:1.45}
+.zone{display:flex;gap:11px;padding:11px 0;border-bottom:1px solid var(--rule);align-items:flex-start}
+.zone .zn{flex-shrink:0;width:22px;height:22px;border-radius:6px;background:var(--ink);color:var(--surface);
+  font:700 11px/22px var(--mono);text-align:center}
+.zone .zt{flex:1;font-size:14px;font-weight:600}
+.zone .zt small{display:block;font-size:12.5px;font-weight:400;color:var(--muted);margin-top:3px;line-height:1.45}
+.zone .zh{font:600 11px var(--mono);color:var(--muted);flex-shrink:0;padding-top:2px}
+.bptable{width:100%;border-collapse:collapse;font:12.5px var(--mono);margin-top:4px}
+.bptable th,.bptable td{padding:8px 6px;border-bottom:1px solid var(--rule);text-align:left;
+  vertical-align:top}
+.bptable th{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.bptable td.n{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+.bptable .r{color:var(--warn)}.bptable .g{color:var(--ok)}
+.flowbox{background:var(--variant);border-radius:12px;padding:13px 15px;margin-bottom:12px;
+  font:12.5px/1.7 var(--mono);color:var(--ink-2)}
+.flowbox .hd{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);
+  font-weight:700;margin-bottom:6px}
+.flowbox .bad{color:var(--warn)}.flowbox .good{color:var(--ok)}
+.tokens{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:4px}
+.tok{display:flex;align-items:center;gap:9px;font:11.5px var(--mono);color:var(--muted)}
+.tok i{width:22px;height:22px;border-radius:6px;flex-shrink:0;border:1px solid var(--rule)}
+#wire{background:var(--surface)}
+.wbody{flex:1;overflow-y:auto;padding:18px 18px 40px}
+.wbody h2{font-size:19px;font-weight:700;letter-spacing:-.02em;margin-bottom:6px}
+.wbody .sub{font-size:13px;color:var(--muted);margin-bottom:18px}
+.wsec{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted);border-bottom:1px solid var(--rule);padding-bottom:7px;margin:26px 0 12px}
+.wbody p{font-size:14.5px;color:var(--ink-2);margin-bottom:12px;line-height:1.55}
+.wbody b{color:var(--ink);font-weight:600}
+.wbody svg.wf{width:100%;height:auto;display:block;background:var(--variant);border-radius:12px;
+  border:1px solid var(--rule)}
+.wcap{font-size:12px;color:var(--muted);margin:7px 0 20px;line-height:1.45}
+.wtable{width:100%;border-collapse:collapse;font:12.5px var(--mono);margin-top:4px}
+.wtable th,.wtable td{padding:8px 6px;border-bottom:1px solid var(--rule);text-align:left}
+.wtable th{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.wtable td.n{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+.wtable .r{color:var(--warn)}.wtable .g{color:var(--ok)}
+.keyline{display:flex;gap:9px;font-size:13px;color:var(--ink-2);margin-bottom:9px;line-height:1.45}
+.keyline b{flex-shrink:0;width:19px;height:19px;border-radius:50%;background:var(--ink);color:var(--surface);
+  font-size:10.5px;display:grid;place-items:center;font-weight:700;margin-top:1px}
+
+.toast{position:absolute;left:50%;bottom:104px;transform:translate(-50%,26px);z-index:95;
+  background:rgba(20,22,26,.95);color:#fff;font-size:13px;padding:10px 18px;border-radius:22px;
+  opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;max-width:84%;text-align:center}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+@media(prefers-reduced-motion:reduce){*{transition-duration:.01ms!important;animation:none!important}}
+@media print{
+  body{background:#fff;display:block;overflow:visible}
+  #app{max-width:none;height:auto;border:0;box-shadow:none}
+  .screen{position:static;transform:none!important;display:none}
+  #wire.on,#blue.on{display:flex!important}
+  #wire.on .top,#blue.on .top{display:none}
+  .wbody{overflow:visible}
+}
+</style>
+</head>
+<body>
+<div id="app">
+<div id="notch"></div>
+
+<!-- ══════════ CONVERSATION LIST ══════════ -->
+<section class="screen base" id="list">
+  <header class="top">
+    <div class="avatar" style="background:linear-gradient(140deg,#7C5CE0,#3B2A9E)">RC</div>
+    <h1>Chats</h1>
+    <button class="iconbtn" onclick="go('blue')" aria-label="Layout blueprint">
+      <svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11M15 9v11"/></svg></button>
+    <button class="iconbtn" onclick="go('wire')" aria-label="Design notes">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h4"/></svg></button>
+    <button class="iconbtn" onclick="toast('New chat — out of scope')" aria-label="New chat">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M4 20h4l10.5-10.5a2.1 2.1 0 00-3-3L5 17z"/></svg></button>
+  </header>
+  <div class="search"><svg class="ic" style="width:17px;height:17px" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg>
+    <input placeholder="Search" oninput="filterConvs(this.value)" aria-label="Search chats"></div>
+  <div class="convs" id="convs"></div>
+</section>
+
+<!-- ══════════ CHAT ══════════ -->
+<section class="screen on" id="chat">
+  <header class="top">
+    <button class="iconbtn" onclick="go('list')" aria-label="Back to chats">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <div class="avatar" id="chatAv">GL</div>
+    <div class="peer"><div class="nm" id="chatName">Gim Ludovice</div><div class="st">Active now</div></div>
+    <button class="iconbtn" onclick="startCall('audio')" aria-label="Voice call">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M5.5 4h3.2l1.8 4.4-2.2 1.4a11.5 11.5 0 005.9 5.9l1.4-2.2 4.4 1.8v3.2a1.8 1.8 0 01-2 1.8A16.5 16.5 0 013.7 6a1.8 1.8 0 011.8-2z"/></svg></button>
+    <button class="iconbtn" onclick="startCall('video')" aria-label="Video call">
+      <svg class="ic" viewBox="0 0 24 24"><rect x="3" y="6" width="12.5" height="12" rx="3"/><path d="M15.5 11l5.5-3v8l-5.5-3z"/></svg></button>
+    <button class="iconbtn" onclick="openSheet('setSheet')" aria-label="Chat settings">
+      <svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.4M12 18.6V21M3 12h2.4M18.6 12H21M5.6 5.6l1.7 1.7M16.7 16.7l1.7 1.7M18.4 5.6l-1.7 1.7M7.3 16.7l-1.7 1.7"/></svg></button>
+  </header>
+
+  <main class="thread" id="thread"></main>
+
+  <section class="strip" id="strip" data-state="open">
+    <div class="striptop">
+      <span class="lab" id="stripLab">Recent photos</span>
+      <button class="mini" id="clearBtn" hidden onclick="clearSel()">Clear</button>
+      <button class="iconbtn" style="width:30px;height:30px;color:var(--muted)" id="collapseBtn"
+        onclick="toggleStrip()" aria-label="Collapse recent photos">
+        <svg class="chev" viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button>
+    </div>
+    <div class="rail" id="rail"></div>
+  </section>
+
+  <footer class="composer" style="position:relative">
+    <button class="iconbtn" onclick="openSheet('sheet')" aria-label="More options">
+      <svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8.2v7.6M8.2 12h7.6"/></svg></button>
+    <div class="field">
+      <input id="msg" placeholder="Message" aria-label="Message" oninput="paint()"
+        onkeydown="if(event.key==='Enter')send()">
+      <button class="iconbtn" style="width:34px;height:34px" onclick="openSheet('emojiSheet')" aria-label="Emoji">
+        <svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 007 0M9 9.5h.01M15 9.5h.01"/></svg></button>
+    </div>
+    <button class="iconbtn" id="micBtn" onclick="recToggle()" aria-label="Record voice message">
+      <svg class="ic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0013 0M12 18v3"/></svg></button>
+    <span class="sendwrap">
+      <button class="iconbtn send" id="sendBtn" onclick="send()" aria-label="Send">
+        <svg class="ic" viewBox="0 0 24 24"><path d="M4.5 12l15.5-7.5-5.5 7.5 5.5 7.5z"/></svg></button>
+      <span class="countpip" id="pip" hidden>0</span>
+    </span>
+    <div class="rec" id="recBar">
+      <span class="blip"></span><span class="tm" id="recTime">0:00</span>
+      <button class="ghost" style="width:auto;padding:6px 10px" onclick="recCancel()">Cancel</button>
+      <button class="iconbtn" onclick="recSend()" aria-label="Send voice message">
+        <svg class="ic" viewBox="0 0 24 24"><path d="M4.5 12l15.5-7.5-5.5 7.5 5.5 7.5z"/></svg></button>
+    </div>
+  </footer>
+</section>
+
+<!-- ══════════ CALL ══════════ -->
+<section class="screen" id="call">
+  <div class="cwho">
+    <div class="cav" id="callAv">GL</div>
+    <div class="cn" id="callName">Gim Ludovice</div>
+    <div class="cs" id="callStatus">Calling…</div>
+  </div>
+  <div class="ctrl">
+    <button class="cbtn" id="muteBtn" onclick="toggleCall('mute',this)" aria-label="Mute">
+      <svg class="ic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0013 0M12 18v3"/></svg></button>
+    <button class="cbtn" id="spkBtn" onclick="toggleCall('speaker',this)" aria-label="Speaker">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 9.5a4 4 0 010 5"/></svg></button>
+    <button class="cbtn end" onclick="endCall()" aria-label="End call">
+      <svg class="ic" viewBox="0 0 24 24" style="transform:rotate(135deg)"><path d="M5.5 4h3.2l1.8 4.4-2.2 1.4a11.5 11.5 0 005.9 5.9l1.4-2.2 4.4 1.8v3.2a1.8 1.8 0 01-2 1.8A16.5 16.5 0 013.7 6a1.8 1.8 0 011.8-2z"/></svg></button>
+  </div>
+</section>
+
+<!-- ══════════ LAYOUT BLUEPRINT ══════════ -->
+<section class="screen" id="blue">
+  <header class="top">
+    <button class="iconbtn" onclick="go('list')" aria-label="Back">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <div class="peer"><div class="nm">Layout blueprint</div>
+      <div class="st" style="color:var(--muted)">Structure, zones, and flow</div></div>
+    <button class="iconbtn" onclick="go('wire')" aria-label="Design notes">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h4"/></svg></button>
+    <button class="iconbtn" onclick="window.print()" aria-label="Print">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M7 9V3h10v6M7 18H5a2 2 0 01-2-2v-4a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2h-2"/><rect x="7" y="14" width="10" height="7"/></svg></button>
+  </header>
+  <div class="bp">
+    <h2>Chat screen — layout blueprint</h2>
+    <div class="sub">Every zone, its height budget, and why it sits where it sits.</div>
+
+    <div class="bpsec">A · Screen skeleton</div>
+    <svg class="plan" viewBox="0 0 300 470" role="img" aria-label="Chat screen layout blueprint">
+      <rect x="26" y="8" width="248" height="454" rx="20" fill="none" stroke="#9AA0A8" stroke-width="1.5"/>
+      <!-- 1 app bar -->
+      <rect x="26" y="8" width="248" height="52" fill="#D7DBE0"/>
+      <circle cx="46" cy="36" r="7" fill="#AEB4BC"/><circle cx="68" cy="36" r="10" fill="#AEB4BC"/>
+      <rect x="84" y="29" width="74" height="7" rx="3.5" fill="#8E959E"/>
+      <rect x="84" y="41" width="44" height="5" rx="2.5" fill="#AEB4BC"/>
+      <circle cx="204" cy="36" r="7" fill="#AEB4BC"/><circle cx="228" cy="36" r="7" fill="#AEB4BC"/>
+      <circle cx="252" cy="36" r="7" fill="#AEB4BC"/>
+      <!-- 2 thread -->
+      <rect x="26" y="60" width="248" height="248" fill="#EDEFF2"/>
+      <rect x="38" y="76" width="118" height="26" rx="13" fill="#D2D6DC"/>
+      <rect x="150" y="112" width="112" height="26" rx="13" fill="#9FC6F5"/>
+      <rect x="38" y="148" width="96" height="26" rx="13" fill="#D2D6DC"/>
+      <rect x="176" y="184" width="86" height="86" rx="14" fill="#9FC6F5"/>
+      <rect x="38" y="282" width="70" height="18" rx="9" fill="#D2D6DC"/>
+      <!-- 3 strip -->
+      <rect x="26" y="308" width="248" height="76" fill="#DCE0E6"/>
+      <rect x="38" y="316" width="86" height="6" rx="3" fill="#9AA0A8"/>
+      <rect x="248" y="313" width="14" height="12" rx="3" fill="#AEB4BC"/>
+      <rect x="38" y="330" width="46" height="46" rx="10" fill="#fff" stroke="#AEB4BC"/>
+      <rect x="90" y="330" width="46" height="46" rx="10" fill="#B7BDC5"/>
+      <rect x="142" y="330" width="46" height="46" rx="10" fill="#B7BDC5" stroke="#0A7CFF" stroke-width="3"/>
+      <circle cx="181" cy="337" r="6" fill="#0A7CFF"/>
+      <rect x="194" y="330" width="46" height="46" rx="10" fill="#B7BDC5"/>
+      <rect x="246" y="330" width="24" height="46" rx="10" fill="#C9CDD3"/>
+      <!-- 4 composer -->
+      <rect x="26" y="384" width="248" height="54" fill="#D7DBE0"/>
+      <circle cx="48" cy="411" r="11" fill="#AEB4BC"/>
+      <rect x="66" y="399" width="152" height="24" rx="12" fill="#EDEFF2"/>
+      <circle cx="205" cy="411" r="8" fill="#C4C9D0"/>
+      <path d="M234 403l18 8-18 8z" fill="#0A7CFF"/>
+      <circle cx="255" cy="401" r="7" fill="#0A7CFF"/>
+      <text x="255" y="404" font-size="8" fill="#fff" text-anchor="middle"
+        font-family="sans-serif" font-weight="bold">2</text>
+      <!-- 5 safe area -->
+      <rect x="26" y="438" width="248" height="24" fill="#C9CDD3"/>
+      <rect x="118" y="447" width="64" height="5" rx="2.5" fill="#8E959E"/>
+      <!-- callouts -->
+      <g font-family="sans-serif" font-size="9" font-weight="bold" fill="#fff">
+        <circle cx="14" cy="34" r="9" fill="#080809"/><text x="14" y="37" text-anchor="middle">1</text>
+        <circle cx="14" cy="184" r="9" fill="#080809"/><text x="14" y="187" text-anchor="middle">2</text>
+        <circle cx="14" cy="346" r="9" fill="#0A7CFF"/><text x="14" y="349" text-anchor="middle">3</text>
+        <circle cx="14" cy="411" r="9" fill="#080809"/><text x="14" y="414" text-anchor="middle">4</text>
+        <circle cx="14" cy="450" r="9" fill="#080809"/><text x="14" y="453" text-anchor="middle">5</text>
+      </g>
+      <g font-family="sans-serif" font-size="7.5" fill="#5D6871">
+        <text x="282" y="38" writing-mode="tb">54px</text>
+        <text x="282" y="150" writing-mode="tb">flex: 1</text>
+        <text x="282" y="330" writing-mode="tb">92px</text>
+        <text x="282" y="404" writing-mode="tb">54px</text>
+      </g>
+    </svg>
+    <div class="bpcap">Fixed top and bottom, one flexible middle. Only zone 3 is new.</div>
+
+    <div class="bpsec">B · Zones</div>
+    <div class="zone"><span class="zn">1</span><span class="zt">App bar
+      <small>Back, avatar, name and presence, call, video, settings. Sticky, never scrolls.</small></span>
+      <span class="zh">54px</span></div>
+    <div class="zone"><span class="zn">2</span><span class="zt">Thread
+      <small>The only zone that grows. Scrolls independently, pinned to the newest message.</small></span>
+      <span class="zh">flex&nbsp;1</span></div>
+    <div class="zone"><span class="zn">3</span><span class="zt" style="color:var(--blue)">Recents strip — the redesign
+      <small>Label plus collapse chevron on a 34px row; a horizontally scrolling rail of 64px thumbnails
+      below it. Camera tile first, then the last twelve photos, then All. Three states: open 92px,
+      peek 34px, off 0px.</small></span>
+      <span class="zh">92px</span></div>
+    <div class="zone"><span class="zn">4</span><span class="zt">Composer
+      <small>⊕, text field with emoji, mic when empty, send with a count badge when not.</small></span>
+      <span class="zh">54px</span></div>
+    <div class="zone"><span class="zn">5</span><span class="zt">Safe area
+      <small>env(safe-area-inset-bottom) so the send button clears the home indicator.</small></span>
+      <span class="zh">auto</span></div>
+
+    <div class="bpsec">C · Why the strip sits at 3, not 2</div>
+    <p>It has to be <b>between the thread and the composer</b>. Above the thread it would compete with
+    the conversation and scroll away. Inside the composer it would push the text field out of the thumb
+    arc. Below the composer it would sit under the keyboard and be invisible when it matters. Zone 3 is
+    the only place where the thumb already rests and where the keyboard pushes it up rather than over it.</p>
+
+    <div class="bpsec">D · Flow — before and after</div>
+    <div class="flowbox"><div class="hd">Before · first run</div>
+      ⊕ → Gallery → Allow → Albums → photo → Send<br>
+      <span class="bad">6 taps · 3 screens · 1.2s wait</span></div>
+    <div class="flowbox"><div class="hd">After</div>
+      photo → Send<br>
+      <span class="good">2 taps · 0 screens · 0 wait</span></div>
+
+    <div class="bpsec">E · Attachment sheet, re-ranked</div>
+    <svg class="plan" viewBox="0 0 300 168" role="img" aria-label="Attachment sheet blueprint">
+      <rect x="10" y="8" width="130" height="152" rx="9" fill="#EDEFF2" stroke="#9AA0A8" stroke-width="1.2"/>
+      <text x="20" y="24" font-family="sans-serif" font-size="8" fill="#C2410C" font-weight="bold">BEFORE · 8 equal tiles</text>
+      <g fill="#C4C9D0">
+        <circle cx="34" cy="52" r="13"/><circle cx="66" cy="52" r="13"/>
+        <circle cx="98" cy="52" r="13"/><circle cx="126" cy="52" r="12"/>
+        <circle cx="34" cy="98" r="13"/><circle cx="66" cy="98" r="13"/>
+        <circle cx="98" cy="98" r="13"/><circle cx="126" cy="98" r="12"/>
+      </g>
+      <text x="20" y="140" font-family="sans-serif" font-size="7" fill="#5D6871">no ranking —</text>
+      <text x="20" y="150" font-family="sans-serif" font-size="7" fill="#5D6871">scan all 8 every time</text>
+
+      <rect x="160" y="8" width="130" height="152" rx="9" fill="#EDEFF2" stroke="#9AA0A8" stroke-width="1.2"/>
+      <text x="170" y="24" font-family="sans-serif" font-size="8" fill="#1B7F4B" font-weight="bold">AFTER · tiered</text>
+      <g fill="#9FC6F5">
+        <rect x="168" y="32" width="36" height="34" rx="8"/><rect x="208" y="32" width="36" height="34" rx="8"/>
+        <rect x="248" y="32" width="34" height="34" rx="8"/>
+      </g>
+      <text x="170" y="80" font-family="sans-serif" font-size="6.5" fill="#5D6871">TIER 1 — daily</text>
+      <g fill="#C4C9D0">
+        <rect x="168" y="86" width="114" height="11" rx="3"/><rect x="168" y="100" width="114" height="11" rx="3"/>
+        <rect x="168" y="114" width="114" height="11" rx="3"/><rect x="168" y="128" width="114" height="11" rx="3"/>
+      </g>
+      <text x="170" y="152" font-family="sans-serif" font-size="6.5" fill="#5D6871">TIER 2 — read the name, not the icon</text>
+    </svg>
+    <div class="bpcap">Grid for the three frequent actions; list for the six rare ones.</div>
+
+    <div class="bpsec">F · Interaction cost</div>
+    <table class="bptable">
+      <tr><th>Measure</th><th style="text-align:right">Before</th><th style="text-align:right">After</th></tr>
+      <tr><td>Taps, first run</td><td class="n r">6</td><td class="n g">2</td></tr>
+      <tr><td>Taps, returning</td><td class="n r">4</td><td class="n g">2</td></tr>
+      <tr><td>Screen changes</td><td class="n r">2–3</td><td class="n g">0</td></tr>
+      <tr><td>Forced wait</td><td class="n r">1.2s</td><td class="n g">0</td></tr>
+      <tr><td>Items to scan</td><td class="n r">8</td><td class="n g">3</td></tr>
+    </table>
+
+    <div class="bpsec">G · Tokens</div>
+    <div class="tokens">
+      <span class="tok"><i style="background:#0A7CFF"></i>#0A7CFF action</span>
+      <span class="tok"><i style="background:#F0F2F5"></i>#F0F2F5 surface-2</span>
+      <span class="tok"><i style="background:#E9EBEF"></i>#E9EBEF incoming</span>
+      <span class="tok"><i style="background:#6E7379"></i>#6E7379 muted</span>
+      <span class="tok"><i style="border-radius:14px"></i>14px thumbnail</span>
+      <span class="tok"><i style="border-radius:11px"></i>20px bubble</span>
+      <span class="tok"><i></i>64px tap target</span>
+      <span class="tok"><i></i>7px rail gap</span>
+    </div>
+
+    <div class="bpsec">H · Design decision</div>
+    <p>Messenger's attachment menu inverts progressive disclosure: it hides the highest-frequency
+    action — sending a photo taken minutes ago — behind a modal built for its rarest ones, so a photo
+    costs the same six taps as a poll. The redesign surfaces the last twelve gallery items in a
+    persistent strip directly above the keyboard, replacing <b>recall with recognition</b>: the user
+    sees the photo instead of remembering which album it landed in, and the target sits in the thumb's
+    resting arc rather than mid-screen behind a modal. The ⊕ button is deliberately kept rather than
+    removed, so no existing user's mental model breaks — only the ranking is corrected, with rare
+    actions keeping the long path and the common one gaining an accelerator. Because a gallery preview
+    permanently on screen is a real privacy cost on an app like Grindr, the strip ships behind a
+    <b>Show recent photos</b> setting and collapses on demand; that trade-off is a product decision,
+    not a cosmetic one, so it is exposed to the user rather than decided for them.</p>
+
+    <div class="bpsec">I · Say this before you're asked</div>
+    <p>Meta already ships an expandable media tray, so the defensible claim is <b>persistent and
+    pre-loaded</b>, not invented — screenshot the current build and count the taps yourself to show the
+    delta. And two taps measures the design, not comprehension: a five-person hallway test would turn
+    this from an argument into evidence.</p>
+  </div>
+</section>
+
+<!-- ══════════ WIREFRAME + WRITE-UP ══════════ -->
+<section class="screen" id="wire">
+  <header class="top">
+    <button class="iconbtn" onclick="go('list')" aria-label="Back">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <div class="peer"><div class="nm">Design notes</div><div class="st" style="color:var(--muted)">Activity 2 deliverable</div></div>
+    <button class="iconbtn" onclick="window.print()" aria-label="Print">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M7 9V3h10v6M7 18H5a2 2 0 01-2-2v-4a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2h-2"/><rect x="7" y="14" width="10" height="7"/></svg></button>
+  </header>
+  <div class="wbody">
+    <h2>Sending a photo you already took</h2>
+    <div class="sub">Messenger · the feature that takes too many steps</div>
+
+    <div class="wsec">1 · The problem</div>
+    <p>The most common non-text message in Messenger is a photo taken minutes ago. It is filed
+    behind an attachment menu whose other seven tiles — polls, games, money, location — are used
+    monthly or never. Sending a photo therefore costs the same as sending a poll: a menu, a
+    permission prompt on first run, an album screen, a load spinner, a grid, and a confirm.
+    The menu is sorted by nothing in particular, so every send begins with a scan of eight
+    identical circles.</p>
+
+    <div class="wsec">2 · Before</div>
+    <svg class="wf" viewBox="0 0 320 250" role="img" aria-label="Current flow wireframe">
+      <g fill="none" stroke="#9AA0A8" stroke-width="1.4">
+        <rect x="10" y="12" width="86" height="150" rx="9"/>
+        <rect x="117" y="12" width="86" height="150" rx="9"/>
+        <rect x="224" y="12" width="86" height="150" rx="9"/>
+        <path d="M10 32h86M117 32h86M224 32h86"/>
+        <path d="M10 142h86M117 142h86M224 142h86"/>
+      </g>
+      <g fill="#C9CDD3">
+        <rect x="18" y="42" width="46" height="12" rx="6"/><rect x="42" y="60" width="46" height="12" rx="6"/>
+        <rect x="18" y="78" width="38" height="12" rx="6"/>
+      </g>
+      <g fill="#B9BEC6">
+        <rect x="16" y="96" width="74" height="42" rx="6"/>
+      </g>
+      <g fill="#8A9099" font-family="sans-serif" font-size="7">
+        <text x="24" y="112" fill="#fff">▦ ▦ ▦ ▦</text><text x="24" y="127" fill="#fff">▦ ▦ ▦ ▦</text>
+      </g>
+      <g fill="#D3D7DC"><rect x="123" y="40" width="74" height="96" rx="5"/></g>
+      <g fill="#8A9099" font-family="sans-serif" font-size="7" text-anchor="middle">
+        <text x="160" y="86">loading…</text></g>
+      <g fill="#C9CDD3">
+        <rect x="230" y="40" width="22" height="22"/><rect x="256" y="40" width="22" height="22"/>
+        <rect x="282" y="40" width="22" height="22"/><rect x="230" y="66" width="22" height="22"/>
+        <rect x="256" y="66" width="22" height="22"/><rect x="282" y="66" width="22" height="22"/>
+        <rect x="230" y="92" width="22" height="22"/><rect x="256" y="92" width="22" height="22"/>
+        <rect x="282" y="92" width="22" height="22"/>
+      </g>
+      <rect x="230" y="122" width="74" height="14" rx="7" fill="#0A7CFF"/>
+      <g font-family="sans-serif" font-size="8" fill="#5D6871">
+        <text x="14" y="176">1 ⊕ menu (8 tiles)</text>
+        <text x="121" y="176">2 permission + wait</text>
+        <text x="228" y="176">3 grid → Send</text>
+      </g>
+      <g font-family="sans-serif" font-size="9" fill="#C2410C" font-weight="bold">
+        <text x="14" y="200">6 taps · 3 screens · 1.2s wait · 2 decisions before a photo is visible</text>
+      </g>
+      <g font-family="sans-serif" font-size="8" fill="#8A9099">
+        <text x="14" y="218">The photo the user wants was taken 4 minutes ago and is</text>
+        <text x="14" y="230">already the first item in every one of these screens.</text>
+      </g>
+    </svg>
+    <div class="wcap">Three screens to reach an item that was never more than one scroll away.</div>
+
+    <div class="wsec">3 · After</div>
+    <svg class="wf" viewBox="0 0 320 250" role="img" aria-label="Redesigned wireframe">
+      <g fill="none" stroke="#9AA0A8" stroke-width="1.4">
+        <rect x="86" y="10" width="148" height="196" rx="11"/>
+        <path d="M86 34h148"/>
+      </g>
+      <circle cx="98" cy="22" r="6" fill="#C9CDD3"/>
+      <g fill="#C9CDD3">
+        <rect x="94" y="46" width="66" height="15" rx="7.5"/>
+        <rect x="160" y="66" width="66" height="15" rx="7.5"/>
+        <rect x="94" y="86" width="52" height="15" rx="7.5"/>
+      </g>
+      <rect x="86" y="126" width="148" height="48" fill="#E4E6EB"/>
+      <g font-family="sans-serif" font-size="6" fill="#6E7379"><text x="92" y="136">RECENT PHOTOS</text></g>
+      <g fill="#B9BEC6">
+        <rect x="92" y="140" width="28" height="28" rx="5"/><rect x="124" y="140" width="28" height="28" rx="5"/>
+        <rect x="156" y="140" width="28" height="28" rx="5"/><rect x="188" y="140" width="28" height="28" rx="5"/>
+      </g>
+      <rect x="92" y="140" width="28" height="28" rx="5" fill="none" stroke="#0A7CFF" stroke-width="2.4"/>
+      <circle cx="117" cy="143" r="4.6" fill="#0A7CFF"/>
+      <g fill="none" stroke="#9AA0A8" stroke-width="1.4"><path d="M86 178h148"/></g>
+      <circle cx="97" cy="192" r="6" fill="none" stroke="#9AA0A8" stroke-width="1.4"/>
+      <rect x="108" y="185" width="94" height="14" rx="7" fill="#E4E6EB"/>
+      <path d="M212 186l14 6-14 6z" fill="#0A7CFF"/>
+      <g stroke="#0A7CFF" stroke-width="1.2" fill="none" stroke-dasharray="3 2">
+        <path d="M106 154h96"/></g>
+      <circle cx="106" cy="154" r="8.5" fill="#080809"/><text x="106" y="157" font-size="8" fill="#fff"
+        text-anchor="middle" font-family="sans-serif" font-weight="bold">1</text>
+      <circle cx="219" cy="192" r="8.5" fill="#080809"/><text x="219" y="195" font-size="8" fill="#fff"
+        text-anchor="middle" font-family="sans-serif" font-weight="bold">2</text>
+      <g font-family="sans-serif" font-size="9" fill="#1B7F4B" font-weight="bold">
+        <text x="14" y="224">2 taps · 0 screens · 0 wait · nothing to remember</text>
+      </g>
+      <g font-family="sans-serif" font-size="8" fill="#8A9099">
+        <text x="14" y="238">The ⊕ button stays where it is — only its ranking changed.</text>
+      </g>
+    </svg>
+    <div class="wcap">
+      <div class="keyline"><b>1</b><span>Recents strip: the last 12 photos, pre-loaded, above the keyboard. Tap toggles selection in place.</span></div>
+      <div class="keyline"><b>2</b><span>Send. The composer's existing button now carries a count badge — no new control to learn.</span></div>
+    </div>
+
+    <div class="wsec">4 · The attachment menu, re-ranked</div>
+    <p>The menu itself was the second problem: eight equal circles in arbitrary order. It is now
+    tiered. Three large tiles carry what people actually send — All photos, Camera, GIF. The other
+    six move to a labelled list, because rare items are found by reading a name, not decoding a
+    pictogram. Gallery loses its top spot on purpose: the strip already does that job, and two front
+    doors to the same room is worse than one.</p>
+
+    <div class="wsec">5 · Interaction cost</div>
+    <table class="wtable">
+      <tr><th>Measure</th><th style="text-align:right">Before</th><th style="text-align:right">After</th></tr>
+      <tr><td>Taps, first run</td><td class="n r">6</td><td class="n g">2</td></tr>
+      <tr><td>Taps, returning</td><td class="n r">4</td><td class="n g">2</td></tr>
+      <tr><td>Screen changes</td><td class="n r">2–3</td><td class="n g">0</td></tr>
+      <tr><td>Forced wait</td><td class="n r">1.2s</td><td class="n g">0</td></tr>
+      <tr><td>Items to scan in menu</td><td class="n r">8</td><td class="n g">3</td></tr>
+    </table>
+
+    <div class="wsec">6 · Design decision</div>
+    <p>Messenger's attachment menu inverts progressive disclosure: it hides the highest-frequency
+    action — sending a photo taken minutes ago — behind a modal built for its rarest ones, so a
+    photo costs the same six taps as a poll. The redesign surfaces the last twelve gallery items in
+    a persistent strip directly above the keyboard, which replaces <b>recall with recognition</b>:
+    the user sees the photo instead of remembering which album it landed in, and the target sits in
+    the thumb's resting arc rather than mid-screen behind a modal. The ⊕ button is kept rather than
+    removed so no existing user's mental model breaks — only the ranking is corrected, with rare
+    actions keeping the long path and the common one getting an accelerator. Because a gallery
+    preview permanently on screen is a real privacy cost on an app like Grindr, the strip ships
+    behind a <b>Show recent photos</b> setting and collapses to a single row on demand; that
+    tradeoff is a product decision, not a cosmetic one, so it is exposed to the user rather than
+    decided for them.</p>
+
+    <div class="wsec">7 · Second feature — sending money</div>
+    <p>Paying someone back inside a chat is the other flow that costs too much. Today you leave
+    Messenger, open GCash, tap Send, choose Express Send, type an eleven-digit number from memory,
+    retype the amount, confirm, wait for the receipt, screenshot it, switch back, and send the
+    screenshot. That is <b>two apps, roughly nine steps, and one number recalled from memory</b> —
+    and the number is where the money actually gets lost, because a single wrong digit pays a
+    stranger irreversibly.</p>
+    <svg class="wf" viewBox="0 0 320 190" role="img" aria-label="Payment flow wireframe">
+      <g font-family="sans-serif" font-size="8" fill="#8A9099"><text x="12" y="16">BEFORE</text></g>
+      <g fill="none" stroke="#9AA0A8" stroke-width="1.3">
+        <rect x="12" y="22" width="52" height="40" rx="6"/><rect x="80" y="22" width="52" height="40" rx="6"/>
+        <rect x="148" y="22" width="52" height="40" rx="6"/><rect x="216" y="22" width="52" height="40" rx="6"/>
+      </g>
+      <g font-family="sans-serif" font-size="6.5" fill="#5D6871" text-anchor="middle">
+        <text x="38" y="46">leave chat</text><text x="106" y="42">type 11-digit</text>
+        <text x="106" y="52">number</text><text x="174" y="46">confirm + wait</text>
+        <text x="242" y="42">screenshot</text><text x="242" y="52">back to chat</text>
+      </g>
+      <g stroke="#C2410C" stroke-width="1.2" fill="none">
+        <path d="M64 42h14M132 42h14M200 42h14"/></g>
+      <text x="12" y="76" font-family="sans-serif" font-size="8.5" fill="#C2410C" font-weight="bold">
+        2 apps · ~9 steps · 1 number from memory · irreversible if mistyped</text>
+      <g font-family="sans-serif" font-size="8" fill="#8A9099"><text x="12" y="104">AFTER</text></g>
+      <g fill="none" stroke="#9AA0A8" stroke-width="1.3">
+        <rect x="12" y="110" width="76" height="46" rx="6"/><rect x="106" y="110" width="76" height="46" rx="6"/>
+        <rect x="200" y="110" width="76" height="46" rx="6"/>
+      </g>
+      <g fill="#C9CDD3"><rect x="20" y="120" width="60" height="14" rx="3"/></g>
+      <g font-family="sans-serif" font-size="6.5" fill="#5D6871" text-anchor="middle">
+        <text x="50" y="146">amount</text><text x="144" y="146">QR card in thread</text>
+        <text x="238" y="141">they scan</text><text x="238" y="151">in GCash</text>
+      </g>
+      <g fill="#B9BEC6"><rect x="128" y="116" width="32" height="32" rx="3"/></g>
+      <g fill="#fff"><rect x="132" y="120" width="8" height="8"/><rect x="148" y="120" width="8" height="8"/>
+        <rect x="132" y="136" width="8" height="8"/><rect x="144" y="132" width="5" height="5"/></g>
+      <g stroke="#1B7F4B" stroke-width="1.2" fill="none"><path d="M88 133h14M182 133h14"/></g>
+      <text x="12" y="176" font-family="sans-serif" font-size="8.5" fill="#1B7F4B" font-weight="bold">
+        1 app · 2 taps · nothing typed from memory · no number to get wrong</text>
+    </svg>
+    <div class="wcap">The QR is attached once in settings. After that, paying is amount → send.</div>
+    <p><b>Design decision.</b> The failure in the current flow is not the number of taps but the
+    eleven digits recalled from memory: mistyping them sends real money to a stranger with no
+    recall. The redesign removes the recall entirely by carrying identity in a QR the payee
+    attaches once, so sending becomes amount plus one tap and the recipient's own GCash app does
+    the paying. Crucially the app never handles money, MPIN or OTP — it hands off to GCash rather
+    than imitating it, because an interface that asks for those credentials outside the official
+    app is indistinguishable from the phishing pattern GCash and the BSP warn users about. A
+    payment feature that looks trustworthy is worse than one that admits its boundary, so the
+    boundary is drawn in the interface itself: the app moves information, GCash moves money.</p>
+
+    <div class="wsec">8 · What this prototype does not prove</div>
+    <p>Meta already ships an expandable media tray, so the defensible claim is <b>persistent and
+    pre-loaded</b>, not invented. Two taps measures the design, not comprehension — a five-person
+    hallway test would move this from an argument to evidence. And a browser cannot read your
+    camera roll unasked, so the strip here is seeded with placeholders until you pick real photos:
+    the persistence is simulated, and on native it would depend on the Android Photo Picker.</p>
+  </div>
+</section>
+
+<div class="scrim" id="scrim" onclick="closeSheets()"></div>
+
+<!-- ══ attachment sheet ══ -->
+<div class="sheet" id="sheet" role="dialog" aria-label="Attachments">
+  <div class="grip"></div><h3>Send</h3>
+  <div class="quick">
+    <button class="qbtn" onclick="pickFiles()">
+      <svg class="ic" viewBox="0 0 24 24"><rect x="3" y="5.5" width="18" height="14" rx="3"/><circle cx="8.8" cy="10.5" r="1.5"/><path d="M3.6 17.5l4.9-4.9 3.9 3.9 2.8-2 5.2 4.3"/></svg>
+      All photos<small>Full gallery</small></button>
+    <button class="qbtn" onclick="pickCamera()">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M3 8.5A2.5 2.5 0 015.5 6h1.8l1.3-2h6.8l1.3 2h1.8A2.5 2.5 0 0121 8.5v8A2.5 2.5 0 0118.5 19h-13A2.5 2.5 0 013 16.5z"/><circle cx="12" cy="12.5" r="3.4"/></svg>
+      Camera<small>Take one now</small></button>
+    <button class="qbtn" onclick="openSheet('gifSheet')">
+      <svg class="ic" viewBox="0 0 24 24"><rect x="3" y="5.5" width="18" height="13" rx="3"/><path d="M10.6 10.2A2.4 2.4 0 108.9 14h1.7v-1.9M13.7 10v4M16.4 14v-4h2.8M16.4 12.2h2.2"/></svg>
+      GIF<small>Search</small></button>
+  </div>
+  <div class="rest" id="restList"></div>
+</div>
+
+<!-- ══ message actions ══ -->
+<div class="sheet msgmenu" id="msgSheet" role="dialog" aria-label="Message actions">
+  <div class="grip"></div>
+  <div class="msgpreview" id="msgPreview"></div>
+  <div class="rest" id="msgActions" style="border-top:1px solid var(--rule)"></div>
+</div>
+
+<div class="sheet" id="confirmSheet" role="dialog" aria-label="Confirm">
+  <div class="grip"></div>
+  <h3 id="cfTitle">Remove message</h3>
+  <div class="pad">
+    <p style="font-size:14px;color:var(--muted);line-height:1.5" id="cfBody"></p>
+    <button class="cta" id="cfGo" style="background:#E0245E">Remove</button>
+    <button class="ghost" onclick="closeSheets()">Cancel</button>
+  </div>
+</div>
+
+<!-- ══ camera ══ -->
+<div class="sheet" id="camSheet" role="dialog" aria-label="Camera">
+  <div class="grip"></div>
+  <div class="gbar">
+    <span class="gt">Camera</span>
+    <button class="iconbtn" style="color:var(--muted)" onclick="flipCam()" aria-label="Switch camera">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M20 12a8 8 0 11-2.3-5.7M20 4v4h-4"/></svg></button>
+  </div>
+  <div class="camstage">
+    <video id="cam" playsinline autoplay muted></video>
+    <div class="camerr" id="camErr" hidden></div>
+  </div>
+  <div class="camctrl">
+    <button class="ghost" style="width:auto" onclick="closeSheets();$('filepick').click()">Gallery</button>
+    <button class="shutter" id="shutter" onclick="snap()" aria-label="Take photo"></button>
+    <button class="ghost" style="width:auto" onclick="nativeCam()">Camera app</button>
+  </div>
+  <canvas id="camCanvas" hidden></canvas>
+</div>
+<div class="sheet" id="emojiSheet" role="dialog" aria-label="Emoji">
+  <div class="grip"></div><h3>Emoji</h3><div class="emojis" id="emojiGrid"></div>
+</div>
+<!-- ══ gif ══ -->
+<div class="sheet" id="gifSheet" role="dialog" aria-label="GIFs">
+  <div class="grip"></div><h3>Trending GIFs</h3><div class="gifs" id="gifGrid"></div>
+</div>
+<!-- ══ sticker ══ -->
+<div class="sheet" id="stickerSheet" role="dialog" aria-label="Stickers">
+  <div class="grip"></div><h3>Stickers</h3>
+  <div class="stktabs" id="stkTabs"></div>
+  <div class="stickers" id="stickerGrid"></div>
+</div>
+<!-- ══ poll ══ -->
+<div class="sheet" id="pollSheet" role="dialog" aria-label="Create poll">
+  <div class="grip"></div><h3>New poll</h3>
+  <div class="pad">
+    <label for="pq">Question</label>
+    <input type="text" id="pq" placeholder="Where do we meet?" oninput="pollValid()">
+    <label>Options</label>
+    <input type="text" id="po1" placeholder="Option 1" oninput="pollValid()" style="margin-bottom:8px">
+    <input type="text" id="po2" placeholder="Option 2" oninput="pollValid()" style="margin-bottom:8px">
+    <input type="text" id="po3" placeholder="Option 3 (optional)">
+    <button class="cta" id="pollGo" disabled onclick="sendPoll()">Send poll</button>
+  </div>
+</div>
+<!-- ══ location ══ -->
+<div class="sheet" id="locSheet" role="dialog" aria-label="Share location">
+  <div class="grip"></div><h3>Share location</h3>
+  <div class="pad">
+    <input type="text" id="locSearch" placeholder="Search a place" aria-label="Search a place"
+      onkeydown="if(event.key==='Enter')searchPlace()" style="margin-bottom:9px">
+    <div class="mapbox" id="mapbox">
+      <div class="crosshair">📍</div>
+      <div class="nomap" id="nomap" hidden>Map tiles need internet. You can still type a place name
+        and send it as a pin.</div>
+    </div>
+    <div class="maprow">
+      <button onclick="locateMe()"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="8"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>My location</button>
+      <button onclick="searchPlace()"><svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg>Search</button>
+    </div>
+    <label for="locName">Label</label>
+    <input type="text" id="locName" value="Pavilion Mall, Biñan, Laguna">
+    <button class="cta" onclick="sendLoc(false)">Send this pin</button>
+    <button class="ghost" onclick="sendLoc(true)">Share live for 15 minutes</button>
+  </div>
+</div>
+<!-- ══ money ══ -->
+<div class="sheet" id="moneySheet" role="dialog" aria-label="GCash">
+  <div class="grip"></div><h3 id="moneyH3">GCash — request payment</h3>
+  <div class="warnbar">This app never touches your money, MPIN or OTP. It hands off to the real
+    GCash app through your own QR. Anything that asks for your MPIN outside GCash is a scam.</div>
+  <div class="qempty" id="qrEmpty">
+    <b>Attach your GCash QR once</b>
+    Open GCash → tap your name → <i>QR code</i> → Download. Then attach it here. Everything after
+    that is amount + send.
+    <button class="cta" style="margin-top:11px;padding:11px" onclick="$('qrpick').click()">Attach GCash QR</button>
+  </div>
+  <div id="qrReady" hidden>
+    <div class="amtview"><span>₱</span><span id="amt" style="color:var(--ink);font-size:40px">0</span></div>
+    <div class="keypad" id="keypad"></div>
+    <div class="pad">
+      <label for="qrNote">Note</label>
+      <input type="text" id="qrNote" placeholder="e.g. share sa lunch">
+      <button class="cta" id="moneyGo" disabled onclick="sendMoney()">Send QR to chat</button>
+      <button class="ghost" onclick="$('qrpick').click()">Replace my QR</button>
+    </div>
+  </div>
+</div>
+<!-- ══ file ══ -->
+<div class="sheet" id="fileSheet" role="dialog" aria-label="Send file">
+  <div class="grip"></div><h3>Recent files</h3>
+  <div class="rest" id="fileList"></div>
+</div>
+<!-- ══ games ══ -->
+<div class="sheet" id="gameSheet" role="dialog" aria-label="Games">
+  <div class="grip"></div>
+  <div id="gameHome">
+    <h3>Play in chat</h3>
+    <div class="gamelist" id="gameList"></div>
+  </div>
+  <div id="gamePlay" hidden>
+    <div class="gbar">
+      <button class="iconbtn" onclick="gameHome()" aria-label="Back to games">
+        <svg class="ic" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <span class="gt" id="gameTitle">Game</span>
+      <button class="iconbtn" style="color:var(--muted)" onclick="restartGame()" aria-label="Restart">
+        <svg class="ic" viewBox="0 0 24 24"><path d="M20 12a8 8 0 11-2.3-5.7M20 4v4h-4"/></svg></button>
+    </div>
+    <div class="gwrap" id="gameBoard"></div>
+    <div class="gstat" id="gstat"></div>
+    <div class="pad"><button class="ghost" onclick="sendGameResult()">Post result to chat</button></div>
+  </div>
+</div>
+<!-- ══ settings ══ -->
+<div class="sheet" id="setSheet" role="dialog" aria-label="Chat settings">
+  <div class="grip"></div><h3>Photo settings</h3>
+  <div class="setrow">
+    <div class="t">Show recent photos in chat
+      <small>Keeps your last 12 photos above the keyboard. Anyone looking at your screen can see
+      them — turn this off in public.</small></div>
+    <button class="toggle" id="tgStrip" role="switch" aria-checked="true" onclick="toggleSetting()"></button>
+  </div>
+  <div class="setrow">
+    <div class="t">Hide after sending
+      <small>Collapses the strip once a photo goes out, so the thread stays full height.</small></div>
+    <button class="toggle" id="tgHide" role="switch" aria-checked="false" onclick="toggleHide()"></button>
+  </div>
+  <div class="setrow">
+    <div class="t">My GCash QR
+      <small id="qrStatus">Not attached. Used for the one-tap payment card — the app never
+      handles money, MPIN or OTP.</small></div>
+    <img id="qrThumb" class="qrthumb" hidden alt="Your GCash QR">
+    <button class="iconbtn" onclick="$('qrpick').click()" aria-label="Attach GCash QR">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+  </div>
+  <div class="setrow">
+    <div class="t">Design notes and wireframe<small>The Activity 2 write-up, printable.</small></div>
+    <button class="iconbtn" onclick="closeSheets();go('wire')" aria-label="Open design notes">
+      <svg class="ic" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<input type="file" id="filepick" accept="image/*" multiple hidden onchange="filesChosen(this)">
+<input type="file" id="campick" accept="image/*" capture="environment" hidden onchange="filesChosen(this)">
+<input type="file" id="docpick" hidden multiple onchange="docChosen(this)">
+<input type="file" id="qrpick" accept="image/*" hidden onchange="qrChosen(this)">
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const RM=matchMedia('(prefers-reduced-motion:reduce)').matches;
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let tt;function toast(m){const t=$('toast');t.textContent=m;t.classList.add('on');
+  clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),2100);}
+
+/* ══ router ══ */
+function go(id){
+  ['list','chat','call','wire','blue'].forEach(s=>$(s).classList.remove('on'));
+  if(id==='chat'){$('chat').classList.add('on');$('list').classList.add('pushed');}
+  else if(id==='list'){$('list').classList.remove('pushed');}
+  else{$(id).classList.add('on');$('list').classList.add('pushed');}
+  if(id==='chat')$('thread').scrollTop=1e6;
+}
+
+/* ══ conversation list ══ */
+const PEOPLE=[
+ ["Gim Ludovice","GL","#6FA8FF,#2F4FE0","Perfect, see you at 10","9:41 AM",true],
+ ["Mam Elaine","ME","#F7A45C,#E14B3C","Sent the training matrix","8:12 AM",false],
+ ["JPO Team","JT","#63E3A8,#249FC6","Vanessa: job fair booth list","Yesterday",true],
+ ["Alfred Paldez","AP","#C6A6F2,#7355E2","Lab schedule works for me","Yesterday",false],
+ ["Micko","MK","#FFD37E,#EE8455","Ok po sir","Tuesday",false],
+ ["Trimex Faculty","TF","#8FE0EA,#3A73D8","Beth: registrar cutoff moved","Monday",false]
+];
+function renderConvs(f=''){
+  const w=$('convs');w.innerHTML='';
+  PEOPLE.filter(p=>p[0].toLowerCase().includes(f.toLowerCase())).forEach(p=>{
+    const b=document.createElement('button');
+    b.className='conv'+(p[5]?' unread':'');
+    b.innerHTML=`<span class="avatar" style="background:linear-gradient(140deg,${p[2]})">${p[1]}</span>
+      <span class="cx"><span class="cn">${esc(p[0])}</span>
+        <span class="cpwrap"><span class="cp">${esc(p[3])}</span></span></span>
+      <span class="rt"><span class="ct">${p[4]}</span>${p[5]?'<span class="dot"></span>':''}</span>`;
+    b.onclick=()=>openChat(p);
+    w.appendChild(b);
+  });
+}
+function filterConvs(v){renderConvs(v);}
+function openChat(p){
+  $('chatName').textContent=p[0];$('chatAv').textContent=p[1];
+  $('chatAv').style.background=`linear-gradient(140deg,${p[2]})`;
+  $('callName').textContent=p[0];$('callAv').textContent=p[1];
+  $('callAv').style.background=`linear-gradient(140deg,${p[2]})`;
+  go('chat');
+}
+
+/* ══ thread ══ */
+let msgs=[{id:'m0a',who:'them',text:'Hey, are we still on for tomorrow?'},
+          {id:'m0b',who:'me',text:'Yes — sending the venue photo now'}];
+function render(){
+  const t=$('thread');t.innerHTML='<div class="day">Today</div>';
+  msgs.forEach((m,i)=>{m.last=(m.who==='me'&&i===msgs.length-1);t.appendChild(node(m));});
+  t.scrollTop=1e6;
+}
+function node(m){
+  const row=document.createElement('div');row.className='row '+m.who;
+  if(m.removedAll){
+    const g=document.createElement('div');g.className='bub gone';
+    g.textContent=(m.who==='me'?'You removed a message':
+      $('chatName').textContent.split(' ')[0]+' removed a message');
+    row.appendChild(g);return row;
+  }
+  if(m.text){const b=document.createElement('div');b.className='bub';b.textContent=m.text;row.appendChild(b);}
+  if(m.photo){
+    const p=document.createElement('div');p.className='pic';
+    if(m.photo.src)p.innerHTML=`<img src="${m.photo.src}" alt="Sent photo">`;
+    else{const d=document.createElement('div');d.className='fake';d.style.background=m.photo.css;p.appendChild(d);}
+    row.appendChild(p);
+  }
+  if(m.gif){const g=document.createElement('div');g.className='gifbub';
+    g.style.background=m.gif.css;g.style.backgroundSize='300% 300%';
+    g.innerHTML=`<b>${esc(m.gif.tag)}</b>`;row.appendChild(g);}
+  if(m.sticker){
+    const s=document.createElement('div');
+    if([...m.sticker].length>2){
+      s.className='bub';s.style.cssText=
+        'background:linear-gradient(140deg,#FFD37E,#EE8455);color:#3B2410;font-weight:800;'+
+        'font-size:21px;letter-spacing:-.01em;padding:14px 20px;border-radius:18px';
+    }else s.className='stick';
+    s.textContent=m.sticker;row.appendChild(s);
+  }
+  if(m.poll)row.appendChild(pollNode(m));
+  if(m.loc){
+    const c=document.createElement('div');c.className='card';
+    const mid='bm'+(m.uid||(m.uid=Math.random().toString(36).slice(2)));
+    c.innerHTML=`<div class="bubmap" id="${mid}"></div>
+      <div class="cb" style="font-size:13.5px"><b>${esc(m.loc.name)}</b>
+      <div style="color:var(--muted);font-size:12px;margin-top:2px">
+        ${m.loc.live?'Live for 15 minutes':'Pinned location'} · ${m.loc.lat.toFixed(4)}, ${m.loc.lng.toFixed(4)}</div>
+      </div>
+      <div class="qact"><a href="https://www.openstreetmap.org/?mlat=${m.loc.lat}&mlon=${m.loc.lng}#map=17/${m.loc.lat}/${m.loc.lng}"
+        target="_blank" rel="noopener">Open in Maps</a></div>`;
+    row.appendChild(c);
+    setTimeout(()=>miniMap(mid,m.loc),20);
+  }
+  if(m.file){
+    const c=document.createElement('div');c.className='card';
+    if(m.file.preview){
+      c.innerHTML=`<div class="pic" style="max-width:236px"><img src="${m.file.url}" alt="${esc(m.file.name)}"></div>`;
+    }
+    c.insertAdjacentHTML('beforeend',
+      `<div class="filerow"><span class="fi">${fileGlyph(m.file.name)}</span>
+        <span class="fn">${esc(m.file.name)}<span class="fs">${esc(m.file.size)}</span></span></div>`);
+    if(m.file.url)c.insertAdjacentHTML('beforeend',
+      `<div class="qact"><a href="${m.file.url}" target="_blank" rel="noopener">Open</a>
+        <a href="${m.file.url}" download="${esc(m.file.name)}">Download</a></div>`);
+    row.appendChild(c);
+  }
+  if(m.pay){
+    const c=document.createElement('div');c.className='qrcard';
+    c.innerHTML=`<div class="qh"><div class="qamt">₱${esc(m.pay.amt)}</div>
+        <div class="qlb">Pay via GCash QR</div></div>
+      <div class="qimg"><img src="${m.pay.qr}" alt="GCash QR code"></div>
+      ${m.pay.note?`<div class="qnote">${esc(m.pay.note)}</div>`:''}
+      <div class="qact"><a href="${m.pay.qr}" download="gcash-qr.png">Save QR</a>
+        <button onclick="openGCash()">Open GCash</button></div>`;
+    row.appendChild(c);
+  }
+  if(m.voice){
+    const v=document.createElement('div');v.className='voice';
+    const bars=Array.from({length:22},(_,i)=>`<i style="height:${5+((i*7)%17)}px"></i>`).join('');
+    v.innerHTML=`<svg class="ic" viewBox="0 0 24 24" style="width:19px;height:19px"><path d="M7 5l11 7-11 7z"/></svg>
+      <span class="wave">${bars}</span><span style="font-size:11.5px;font-variant-numeric:tabular-nums">${m.voice}</span>`;
+    row.appendChild(v);}
+  if(m.game){const c=document.createElement('div');c.className='card';
+    c.innerHTML=`<div class="ch">🎮 Tic-tac-toe</div><div class="cb" style="font-size:13.5px">${esc(m.game)}</div>`;
+    row.appendChild(c);}
+  const wrap=document.createElement('div');wrap.className='mwrap';
+  while(row.firstChild)wrap.appendChild(row.firstChild);
+  const dots=document.createElement('button');dots.className='dots';
+  dots.setAttribute('aria-label','Message options');
+  dots.innerHTML='<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg>';
+  dots.onclick=e=>{e.stopPropagation();openMsgMenu(m.id);};
+  wrap.appendChild(dots);
+  row.appendChild(wrap);
+  let lp;
+  row.addEventListener('touchstart',()=>{lp=setTimeout(()=>openMsgMenu(m.id),480)},{passive:true});
+  ['touchend','touchmove','touchcancel'].forEach(ev=>
+    row.addEventListener(ev,()=>clearTimeout(lp),{passive:true}));
+  if(m.last){const r=document.createElement('div');r.className='receipt';r.textContent='Delivered';row.appendChild(r);}
+  return row;
+}
+function pollNode(m){
+  const c=document.createElement('div');c.className='card poll';
+  const total=m.poll.opts.reduce((a,o)=>a+o.v,0)||1;
+  c.innerHTML=`<div class="ch">📊 ${esc(m.poll.q)}</div>`;
+  const b=document.createElement('div');b.className='cb';
+  m.poll.opts.forEach((o,i)=>{
+    const btn=document.createElement('button');
+    btn.className='opt'+(m.poll.voted===i?' voted':'');
+    btn.innerHTML=`<span class="bar" style="width:${Math.round(o.v/total*100)}%"></span>
+      <span class="box">${m.poll.voted===i?'✓':''}</span>
+      <span class="ol">${esc(o.t)}</span><span class="ov">${o.v}</span>`;
+    btn.onclick=()=>{
+      if(m.poll.voted!==null)m.poll.opts[m.poll.voted].v--;
+      m.poll.voted=i;o.v++;render();
+    };
+    b.appendChild(btn);
+  });
+  c.appendChild(b);return c;
+}
+let mid=0;
+function push(m){m.id='m'+(++mid);msgs.push(m);render();}
+
+/* ══ recents strip ══ */
+const SEED=[["4m","#F7A45C,#E14B3C"],["12m","#7CB0FF,#2B49DF"],["1h","#63E3A8,#249FC6"],
+ ["2h","#C6A6F2,#7355E2"],["3h","#FFD37E,#EE8455"],["5h","#8FE0EA,#3A73D8"],
+ ["Yest","#F9A2C4,#B04D9B"],["Yest","#A0E79F,#3B9A62"],["Yest","#FFB59F,#DE5B78"],
+ ["2d","#AEB9C7,#57687E"],["2d","#82DCD4,#2A8791"],["3d","#EBC97C,#AD7B3A"]];
+let recents=SEED.map((s,i)=>({id:'s'+i,age:s[0],css:`linear-gradient(140deg,${s[1]})`,src:null}));
+let sel=new Set(),stripOn=true,hideAfter=false,collapsed=false;
+
+function renderRail(){
+  const r=$('rail');r.innerHTML='';
+  recents.forEach(p=>{
+    const b=document.createElement('button');b.className='tile';
+    b.setAttribute('aria-pressed',sel.has(p.id));b.setAttribute('aria-label',`Photo from ${p.age}`);
+    if(p.src)b.innerHTML=`<img src="${p.src}" alt="">`;else b.style.background=p.css;
+    b.insertAdjacentHTML('beforeend',
+      `<span class="age">${p.age}</span><span class="ring"></span><span class="tick">✓</span>`);
+    b.onclick=()=>{sel.has(p.id)?sel.delete(p.id):sel.add(p.id);renderRail();paint();};
+    r.appendChild(b);
+  });
+  const cm=document.createElement('button');cm.className='railact';cm.onclick=pickCamera;
+  cm.setAttribute('aria-label','Open camera');
+  cm.innerHTML=`<svg class="ic" viewBox="0 0 24 24"><path d="M3 8.5A2.5 2.5 0 015.5 6h1.8l1.3-2h6.8l1.3 2h1.8A2.5 2.5 0 0121 8.5v8A2.5 2.5 0 0118.5 19h-13A2.5 2.5 0 013 16.5z"/><circle cx="12" cy="12.5" r="3.4"/></svg>Camera`;
+  r.prepend(cm);
+  const a=document.createElement('button');a.className='railact';a.onclick=pickFiles;
+  a.innerHTML=`<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="5.5" width="18" height="14" rx="3"/><path d="M3.6 17.5l4.9-4.9 3.9 3.9 2.8-2 5.2 4.3"/></svg>All`;
+  r.appendChild(a);
+}
+function stripState(){
+  $('strip').dataset.state=!stripOn?'off':(collapsed?'peek':'open');
+  $('collapseBtn').setAttribute('aria-label',collapsed?'Show recent photos':'Collapse recent photos');
+}
+function toggleStrip(){collapsed=!collapsed;if(collapsed){sel.clear();renderRail();paint();}stripState();}
+function clearSel(){sel.clear();renderRail();paint();}
+function paint(){
+  const n=sel.size,txt=$('msg').value.trim();
+  $('sendBtn').classList.toggle('live',n>0||txt!=='');
+  $('micBtn').hidden=(n>0||txt!=='');
+  $('pip').hidden=n===0;$('pip').textContent=n;
+  $('stripLab').textContent=n?(n===1?'1 photo selected':n+' photos selected'):'Recent photos';
+  $('stripLab').classList.toggle('hot',n>0);
+  $('clearBtn').hidden=n===0;
+}
+function send(){
+  const txt=$('msg').value.trim();
+  if(!sel.size&&!txt)return;
+  if(txt)push({who:'me',text:txt});
+  recents.filter(p=>sel.has(p.id)).forEach(p=>push({who:'me',photo:p}));
+  const n=sel.size;$('msg').value='';sel.clear();renderRail();paint();
+  if(n&&hideAfter){collapsed=true;stripState();}
+  if(n)toast(n===1?'Photo sent in 2 taps':n+' photos sent');
+  reply();
+}
+let replied=false;
+function reply(){
+  if(replied)return;replied=true;
+  setTimeout(()=>{
+    const t=$('thread'),ty=document.createElement('div');
+    ty.className='typing';ty.innerHTML='<i></i><i></i><i></i>';
+    t.appendChild(ty);t.scrollTop=1e6;
+    setTimeout(()=>{ty.remove();push({who:'them',text:'Perfect, that\u2019s the place. See you at 10.'});},RM?300:1500);
+  },RM?200:700);
+}
+
+/* ══ real photos / files ══ */
+function pickFiles(){closeSheets();$('filepick').click();}
+/* ══ message actions — remove for you vs remove for everyone ══ */
+function summarize(m){
+  if(m.text)return m.text;
+  if(m.photo)return '📷 Photo';
+  if(m.gif)return 'GIF';
+  if(m.sticker)return 'Sticker '+m.sticker;
+  if(m.poll)return '📊 '+m.poll.q;
+  if(m.loc)return '📍 '+m.loc.name;
+  if(m.file)return '📄 '+m.file.name;
+  if(m.pay)return '₱'+m.pay.amt+' GCash QR';
+  if(m.voice)return '🎙 Voice message';
+  if(m.game)return '🎮 '+m.game;
+  return 'Message';
+}
+const ACT={
+  copy:['Copy','Put the text on your clipboard','M9 9h10v10H9z|M5 15V5h10'],
+  reply:['Reply','Quote this in your next message','M9 7L4 12l5 5|M4 12h9a6 6 0 016 6v1'],
+  forward:['Forward','Send it to another chat','M15 7l5 5-5 5|M20 12H11a6 6 0 00-6 6v1'],
+  you:['Remove for you','Only you stop seeing it. It stays on their phone.','M4 7h16|M9 7V5h6v2|M7 7l1 13h8l1-13'],
+  all:['Remove for everyone','Replaced by a note that you removed a message.','M4 7h16|M9 7V5h6v2|M7 7l1 13h8l1-13|M10 11v6M14 11v6']
+};
+let target=null;
+function openMsgMenu(id){
+  target=msgs.find(m=>m.id===id);if(!target)return;
+  $('msgPreview').textContent=summarize(target);
+  const w=$('msgActions');w.innerHTML='';
+  const keys=['copy','reply','forward','you'];
+  if(target.who==='me')keys.push('all');   /* Messenger: only your own messages */
+  keys.forEach(k=>{
+    const[n,s,d]=ACT[k];
+    const b=document.createElement('button');
+    b.className='rrow'+(k==='you'||k==='all'?' danger':'');
+    b.innerHTML=`<svg class="ic" viewBox="0 0 24 24">${d.split('|').map(p=>`<path d="${p}"/>`).join('')}</svg>
+      <span class="t">${n}<small>${s}</small></span>`;
+    b.onclick=()=>msgAction(k);
+    w.appendChild(b);
+  });
+  openSheet('msgSheet');
+}
+function msgAction(k){
+  const m=target;if(!m)return;
+  if(k==='copy'){
+    const t=summarize(m);
+    (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject())
+      .then(()=>toast('Copied')).catch(()=>toast('Copy blocked by the browser'));
+    return closeSheets();
+  }
+  if(k==='reply'){
+    $('msg').value=`↪ ${summarize(m).slice(0,40)} — `;paint();closeSheets();$('msg').focus();return;
+  }
+  if(k==='forward'){closeSheets();toast('Forward — pick a chat (out of scope)');return;}
+  confirmRemove(k);
+}
+function confirmRemove(k){
+  $('cfTitle').textContent=k==='all'?'Remove for everyone?':'Remove for you?';
+  $('cfBody').textContent=k==='all'
+    ? 'This message will be removed for everyone in the chat. They will see a note saying you removed a message. This cannot be undone.'
+    : 'This message will be removed for you only. Other people in the chat will still see it.';
+  $('cfGo').textContent=k==='all'?'Remove for everyone':'Remove for you';
+  $('cfGo').onclick=()=>doRemove(k);
+  openSheet('confirmSheet');
+}
+function doRemove(k){
+  const m=target;if(!m)return;
+  if(k==='all'){
+    ['text','photo','gif','sticker','poll','loc','file','pay','voice','game'].forEach(f=>delete m[f]);
+    m.removedAll=true;
+  }else{
+    msgs=msgs.filter(x=>x.id!==m.id);
+  }
+  target=null;closeSheets();render();
+  toast(k==='all'?'Removed for everyone':'Removed for you');
+}
+const IS_TOUCH=matchMedia('(pointer:coarse)').matches||/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+const SECURE=window.isSecureContext&&!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia);
+let stream=null,facing='environment';
+
+function pickCamera(){
+  closeSheets();
+  if(IS_TOUCH)return nativeCam();      /* phone: hand off to the real camera app */
+  openSheet('camSheet');startCam();     /* desktop: no camera app exists, use the webcam */
+}
+function nativeCam(){closeSheets();stopCam();$('campick').click();}
+
+function startCam(){
+  const v=$('cam'),e=$('camErr');
+  v.classList.toggle('mirror',facing==='user');
+  if(!SECURE){
+    e.hidden=false;
+    e.innerHTML=`<div><b>Camera needs a secure page</b>
+      Browsers block the camera on files opened directly from disk.
+      Serve the folder once and the viewfinder works:
+      <code>python3 -m http.server 8000</code><br>then open
+      <code>http://localhost:8000</code>
+      <br><br>On a phone, "Camera app" below still opens your real camera.</div>`;
+    $('shutter').disabled=true;return;
+  }
+  navigator.mediaDevices.getUserMedia({video:{facingMode:facing},audio:false})
+    .then(s=>{stream=s;v.srcObject=s;e.hidden=true;$('shutter').disabled=false;})
+    .catch(err=>{
+      e.hidden=false;$('shutter').disabled=true;
+      e.innerHTML=`<div><b>${err.name==='NotAllowedError'?'Camera blocked':'No camera found'}</b>
+        ${err.name==='NotAllowedError'
+          ?'Allow camera access in the address bar, then reopen this sheet.'
+          :'No usable camera on this device.'}
+        <br><br>You can still use "Camera app" or "Gallery" below.</div>`;
+    });
+}
+function stopCam(){if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}}
+function flipCam(){facing=facing==='user'?'environment':'user';stopCam();startCam();}
+function snap(){
+  const v=$('cam'),c=$('camCanvas');
+  if(!v.videoWidth)return toast('Camera not ready');
+  c.width=v.videoWidth;c.height=v.videoHeight;
+  const x=c.getContext('2d');
+  if(facing==='user'){x.translate(c.width,0);x.scale(-1,1);}
+  x.drawImage(v,0,0);
+  c.toBlob(b=>{
+    const url=URL.createObjectURL(b);
+    recents=[{id:'c'+Date.now(),age:'Now',src:url,css:null},...recents].slice(0,12);
+    sel=new Set([recents[0].id]);
+    collapsed=false;stripState();renderRail();paint();
+    closeSheets();stopCam();
+    toast('Shot taken — tap send');
+  },'image/jpeg',.9);
+}
+function filesChosen(inp){
+  const files=[...inp.files].slice(0,12);if(!files.length)return;
+  const added=files.map((f,i)=>({id:'u'+Date.now()+i,age:'Now',src:URL.createObjectURL(f),css:null}));
+  recents=[...added,...recents].slice(0,12);
+  sel=new Set(added.map(a=>a.id));collapsed=false;stripState();renderRail();paint();
+  toast(added.length+' ready — tap send');inp.value='';
+}
+function bytes(n){
+  if(n<1024)return n+' B';
+  if(n<1048576)return (n/1024).toFixed(0)+' KB';
+  return (n/1048576).toFixed(1)+' MB';
+}
+function fileGlyph(name){
+  const e=(name.split('.').pop()||'').toLowerCase();
+  const map={pdf:'📕',doc:'📘',docx:'📘',xls:'📗',xlsx:'📗',csv:'📗',ppt:'📙',pptx:'📙',
+    zip:'🗜️',rar:'🗜️',mp3:'🎵',wav:'🎵',mp4:'🎬',mov:'🎬',txt:'📄',apk:'📦'};
+  return `<span style="font-size:19px">${map[e]||'📄'}</span>`;
+}
+function docChosen(inp){
+  const files=[...inp.files];if(!files.length)return;
+  files.forEach(f=>{
+    push({who:'me',file:{name:f.name,size:bytes(f.size),url:URL.createObjectURL(f),
+      preview:f.type.startsWith('image/')}});
+  });
+  toast(files.length===1?'File sent — tap Open to check it':files.length+' files sent');
+  inp.value='';reply();
+}
+
+/* ══ sheets ══ */
+const SHEETS=['sheet','msgSheet','confirmSheet','camSheet','emojiSheet','gifSheet','stickerSheet','pollSheet','locSheet',
+              'moneySheet','fileSheet','gameSheet','setSheet'];
+function openSheet(id){closeSheets();$('scrim').classList.add('on');$(id).classList.add('up');
+  if(id==='locSheet')setTimeout(initMap,60);
+  if(id==='moneySheet')qrState();}
+function closeSheets(){$('scrim').classList.remove('on');SHEETS.forEach(s=>$(s).classList.remove('up'));
+  if(typeof stopCam==='function')stopCam();}
+
+const REST=[
+ ['Poll','Ask the group','M5 20V10M12 20V4M19 20v-7',()=>openSheet('pollSheet')],
+ ['Location','Share where you are','M12 21s7-6.1 7-11a7 7 0 10-14 0c0 4.9 7 11 7 11z|M12 10.2m-2.4 0a2.4 2.4 0 104.8 0a2.4 2.4 0 10-4.8 0',()=>openSheet('locSheet')],
+ ['File','PDFs and documents','M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z|M14 3v5h5',()=>openSheet('fileSheet')],
+ ['Sticker','Packs and avatars','M4 12a8 8 0 018-8 8 8 0 018 8c0 .6-4 0-6 2s-1.4 6-2 6a8 8 0 01-8-8z',()=>openSheet('stickerSheet')],
+ ['Send money','Linked to GCash','M3 7.5h18v9H3z|M12 12m-2.2 0a2.2 2.2 0 104.4 0a2.2 2.2 0 10-4.4 0',()=>openSheet('moneySheet')],
+ ['Games','Play in chat','M7 12h4M9 10v4M15.5 11.5h.01M18 13.5h.01|M3.5 15.5l1.3-6A3 3 0 017.7 7h8.6a3 3 0 012.9 2.5l1.3 6a2.4 2.4 0 01-4.3 1.9l-1-1.4H8.8l-1 1.4a2.4 2.4 0 01-4.3-1.9z',()=>{gameHome();openSheet('gameSheet');}]
+];
+function buildRest(){
+  const w=$('restList');w.innerHTML='';
+  REST.forEach(([n,s,d,fn])=>{
+    const b=document.createElement('button');b.className='rrow';
+    b.innerHTML=`<svg class="ic" viewBox="0 0 24 24">${d.split('|').map(p=>`<path d="${p}"/>`).join('')}</svg>
+      <span class="t">${n}<small>${s}</small></span>
+      <svg class="arw" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>`;
+    b.onclick=fn;w.appendChild(b);
+  });
+}
+
+/* ══ emoji ══ */
+const EMO=[...'😀😂🥹😍😎🤔😭🙏👍👏🙌🔥💯✨🎉❤️🥳😅😴🤝☕🍜🏀⚽📚💻🚗🌧️🌞🐶🐱🎂'];
+function buildEmoji(){
+  const g=$('emojiGrid');g.innerHTML='';
+  EMO.forEach(e=>{const b=document.createElement('button');b.textContent=e;
+    b.onclick=()=>{$('msg').value+=e;paint();closeSheets();$('msg').focus();};g.appendChild(b);});
+}
+/* ══ gif ══ */
+const GIFS=[["#FF6B6B,#FFD93D,#6BCB77","YES"],["#4D96FF,#6BCB77,#FFD93D","LOL"],
+ ["#B983FF,#94B3FD,#94DAFF","OK"],["#FF9A8B,#FF6A88,#FF99AC","OMG"],
+ ["#43E97B,#38F9D7,#4D96FF","NICE"],["#FA709A,#FEE140,#FF6B6B","THANKS"]];
+function buildGifs(){
+  const g=$('gifGrid');g.innerHTML='';
+  GIFS.forEach(([c,tag])=>{
+    const b=document.createElement('button');
+    b.style.background=`linear-gradient(120deg,${c})`;b.innerHTML=`<b>${tag}</b>`;
+    b.onclick=()=>{push({who:'me',gif:{css:`linear-gradient(120deg,${c})`,tag}});
+      closeSheets();toast('GIF sent');reply();};
+    g.appendChild(b);
+  });
+}
+/* ══ stickers ══ */
+const PACKS={
+ 'Animals':[...'🐻🐼🐸🦊🐨🐯🦁🐵🐶🐱🐰🐹🐧🦉🦄🐢🐙🦋🐝🐳'],
+ 'Reactions':[...'😀😂🥹😍😎🤔😭😅🥳😴🙃😱🤯🥰😤🫠🤗😐🙄😇'],
+ 'Hands':[...'👍👎👏🙏🤝✌️🤞👌🤙💪🫶👋🤟☝️✊👊🖐️🫰🤲🙌'],
+ 'Food':[...'🍕🍰🌮🍣🍜🍚🍗🥟🍤🥭🍉🍌☕🧋🍺🍦🥥🍢🫕🍲'],
+ 'Objects':[...'🚀⭐🌈🎈🎉🎁💡📚💻📱🚗🏀⚽🎸🕒🔥💯✨🎯🏆'],
+ 'Text':['SIGE NA','OO NGA','CHARÔT','G!','SALAMAT','LODI','PETMALU','WALEY','SANA ALL','BASTA',
+         'HUY','TARA','ANO BA','OKS LANG','BAHALA NA','SUS','GRABE','AYOKO','PWEDE','TAMA NA']
+};
+let pack='Animals';
+function buildStickers(){
+  const t=$('stkTabs');t.innerHTML='';
+  Object.keys(PACKS).forEach(k=>{
+    const b=document.createElement('button');b.textContent=k;
+    b.className=k===pack?'on':'';b.onclick=()=>{pack=k;buildStickers();};
+    t.appendChild(b);
+  });
+  const g=$('stickerGrid');g.innerHTML='';
+  g.style.gridTemplateColumns=pack==='Text'?'repeat(2,1fr)':'repeat(4,1fr)';
+  PACKS[pack].forEach(s=>{
+    const b=document.createElement('button');b.textContent=s;
+    if(pack==='Text')b.className='txtstick';
+    b.onclick=()=>{push({who:'me',sticker:s,text:null});closeSheets();reply();};
+    g.appendChild(b);
+  });
+}
+/* ══ poll ══ */
+function pollValid(){
+  $('pollGo').disabled=!($('pq').value.trim()&&$('po1').value.trim()&&$('po2').value.trim());
+}
+function sendPoll(){
+  const opts=[$('po1'),$('po2'),$('po3')].map(i=>i.value.trim()).filter(Boolean)
+    .map(t=>({t,v:0}));
+  push({who:'me',poll:{q:$('pq').value.trim(),opts,voted:null}});
+  ['pq','po1','po2','po3'].forEach(i=>$(i).value='');pollValid();
+  closeSheets();toast('Poll sent — tap an option to vote');reply();
+}
+/* ══ location — real map ══ */
+let map=null,here={lat:14.3417,lng:121.0806};/* Biñan, Laguna */
+const HASMAP=typeof L!=='undefined';
+function initMap(){
+  if(!HASMAP){$('nomap').hidden=false;return;}
+  if(map){setTimeout(()=>map.invalidateSize(),80);return;}
+  map=L.map('mapbox',{zoomControl:false,attributionControl:true})
+    .setView([here.lat,here.lng],15);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    {maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
+  L.control.zoom({position:'bottomright'}).addTo(map);
+  map.on('moveend',()=>{const c=map.getCenter();here={lat:c.lat,lng:c.lng};reverse();});
+  setTimeout(()=>map.invalidateSize(),120);
+}
+function miniMap(id,loc){
+  const el=$(id);if(!el||!HASMAP||el.dataset.done)return;
+  el.dataset.done='1';
+  const m=L.map(id,{zoomControl:false,attributionControl:false,dragging:false,
+    scrollWheelZoom:false,doubleClickZoom:false,touchZoom:false,keyboard:false,tap:false})
+    .setView([loc.lat,loc.lng],15);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(m);
+  L.marker([loc.lat,loc.lng]).addTo(m);
+}
+let revT;
+function reverse(){
+  clearTimeout(revT);
+  revT=setTimeout(()=>{
+    fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${here.lat}&lon=${here.lng}&zoom=17`)
+      .then(r=>r.json())
+      .then(d=>{if(d&&d.display_name)$('locName').value=d.display_name.split(',').slice(0,3).join(',').trim();})
+      .catch(()=>{});
+  },600);
+}
+function locateMe(){
+  if(!navigator.geolocation)return toast('This browser has no location access');
+  toast('Finding you…');
+  navigator.geolocation.getCurrentPosition(p=>{
+    here={lat:p.coords.latitude,lng:p.coords.longitude};
+    if(map)map.setView([here.lat,here.lng],17);
+    reverse();toast('Found you');
+  },()=>toast('Location blocked — allow it in your browser'),{enableHighAccuracy:true,timeout:9000});
+}
+function searchPlace(){
+  const q=$('locSearch').value.trim();if(!q)return;
+  toast('Searching…');
+  fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q='+encodeURIComponent(q))
+    .then(r=>r.json())
+    .then(d=>{
+      if(!d.length)return toast('No place found');
+      here={lat:+d[0].lat,lng:+d[0].lon};
+      $('locName').value=d[0].display_name.split(',').slice(0,3).join(',').trim();
+      if(map)map.setView([here.lat,here.lng],16);
+      toast('Pin moved');
+    }).catch(()=>toast('Search needs internet'));
+}
+function sendLoc(live){
+  push({who:'me',loc:{name:$('locName').value||'Shared location',live,lat:here.lat,lng:here.lng}});
+  closeSheets();toast(live?'Sharing live for 15 minutes':'Location sent');reply();
+}
+/* ══ files ══ */
+const FILEKINDS=[
+ ['Browse this device','Any file — sends for real','*'],
+ ['Documents','PDF, Word, Excel, PowerPoint','.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt'],
+ ['Audio','Voice notes, music','audio/*'],
+ ['Video','Clips and recordings','video/*'],
+ ['Archives','ZIP and RAR','.zip,.rar,.7z']
+];
+function buildFiles(){
+  const w=$('fileList');w.innerHTML='';
+  FILEKINDS.forEach(([n,s,acc])=>{
+    const b=document.createElement('button');b.className='rrow';
+    b.innerHTML=`<svg class="ic" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/></svg>
+      <span class="t">${esc(n)}<small>${esc(s)}</small></span>
+      <svg class="arw" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>`;
+    b.onclick=()=>{
+      const p=$('docpick');
+      if(acc==='*')p.removeAttribute('accept');else p.setAttribute('accept',acc);
+      closeSheets();p.click();
+    };
+    w.appendChild(b);
+  });
+}
+/* ══ GCash — QR handoff. No money, MPIN or OTP ever passes through this app. ══ */
+let amount='',myQR=null;
+function buildPad(){
+  const k=$('keypad');k.innerHTML='';
+  [...'123456789','.','0','⌫'].forEach(d=>{
+    const b=document.createElement('button');b.textContent=d;
+    b.onclick=()=>{
+      if(d==='⌫')amount=amount.slice(0,-1);
+      else if(d==='.'&&amount.includes('.'))return;
+      else if(amount.length<7)amount+=d;
+      $('amt').textContent=amount||'0';
+      $('moneyGo').disabled=!(parseFloat(amount)>0);
+    };
+    k.appendChild(b);
+  });
+}
+function qrChosen(inp){
+  const f=inp.files[0];if(!f)return;
+  myQR=URL.createObjectURL(f);
+  $('qrThumb').src=myQR;$('qrThumb').hidden=false;
+  $('qrStatus').textContent='Attached. Sending is now amount + one tap.';
+  qrState();inp.value='';toast('GCash QR attached');
+}
+function qrState(){
+  const ok=!!myQR;
+  $('qrEmpty').hidden=ok;$('qrReady').hidden=!ok;
+}
+function sendMoney(){
+  if(!myQR)return;
+  push({who:'me',pay:{amt:parseFloat(amount).toLocaleString('en-PH',{minimumFractionDigits:2}),
+    qr:myQR,note:$('qrNote').value.trim()}});
+  amount='';$('amt').textContent='0';$('moneyGo').disabled=true;$('qrNote').value='';
+  closeSheets();toast('QR sent — they scan it in GCash to pay');reply();
+}
+function openGCash(){
+  toast('Opening GCash — scan the QR there. This app never sees your money.');
+  setTimeout(()=>{location.href='gcash://';},600);
+  setTimeout(()=>{toast('If nothing opened, open GCash manually and scan the QR.');},2600);
+}
+/* ══════════ GAMES ══════════ */
+const GAMES=[
+ ['ttt','⭕','Tic-tac-toe','Unbeatable opponent. Draw is the best you get.'],
+ ['c4','🔴','Connect Four','Four in a row. It blocks and it hunts.'],
+ ['mem','🧠','Memory Match','Eight pairs. Fewest moves wins.'],
+ ['rps','✊','Rock Paper Scissors','First to 3. It reads your habits.']
+];
+let game=null,gstate=null,gover=false,gresult='';
+function buildGameList(){
+  const w=$('gameList');w.innerHTML='';
+  GAMES.forEach(([id,ic,n,d])=>{
+    const b=document.createElement('button');b.className='gcard';
+    b.innerHTML=`<span class="gi">${ic}</span><span class="gn">${n}</span><span class="gd">${d}</span>`;
+    b.onclick=()=>startGame(id);w.appendChild(b);
+  });
+}
+function gameHome(){$('gamePlay').hidden=true;$('gameHome').hidden=false;}
+function startGame(id){
+  game=id;$('gameHome').hidden=true;$('gamePlay').hidden=false;
+  $('gameTitle').textContent=GAMES.find(g=>g[0]===id)[2];
+  restartGame();
+}
+function restartGame(){({ttt:initTTT,c4:initC4,mem:initMem,rps:initRPS})[game]();}
+function say(t){$('gstat').textContent=t;gresult=t;}
+function sendGameResult(){
+  const nm=game?GAMES.find(g=>g[0]===game)[2]:'Game';
+  push({who:'me',game:`${nm} — ${gover?gresult:'in progress'}`});
+  closeSheets();reply();
+}
+
+/* ── tic-tac-toe with minimax ── */
+const LINES=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+function win3(b){for(const[a,c,d]of LINES)if(b[a]&&b[a]===b[c]&&b[a]===b[d])return b[a];return null;}
+function initTTT(){gstate=Array(9).fill('');gover=false;say('You are ✕. Tap a square.');drawTTT();}
+function drawTTT(){
+  const w=$('gameBoard');w.innerHTML='<div class="ttt" id="tttG"></div>';
+  const g=$('tttG');
+  gstate.forEach((v,i)=>{
+    const b=document.createElement('button');b.textContent=v;b.disabled=!!v||gover;
+    b.style.color=v==='✕'?'var(--blue)':'var(--warn)';
+    b.onclick=()=>playTTT(i);g.appendChild(b);
+  });
+}
+function minimax(b,me){
+  const w=win3(b);
+  if(w==='◯')return{s:10};if(w==='✕')return{s:-10};if(!b.includes(''))return{s:0};
+  let best={s:me?-99:99,i:-1};
+  b.forEach((v,i)=>{
+    if(v)return;
+    b[i]=me?'◯':'✕';
+    const r=minimax(b,!me).s;b[i]='';
+    if(me?r>best.s:r<best.s)best={s:r,i};
+  });
+  return best;
+}
+function playTTT(i){
+  if(gstate[i]||gover)return;
+  gstate[i]='✕';
+  if(!win3(gstate)&&gstate.includes(''))gstate[minimax(gstate,true).i]='◯';
+  const w=win3(gstate);
+  if(w){gover=true;say(w==='✕'?'You win.':'You lost.');}
+  else if(!gstate.includes('')){gover=true;say('Draw — the best result available.');}
+  drawTTT();
+}
+
+/* ── connect four ── */
+const R=6,C=7;
+function initC4(){gstate=Array(R*C).fill(0);gover=false;say('You are yellow. Pick a column.');drawC4();}
+function drawC4(){
+  const w=$('gameBoard');w.innerHTML='<div class="c4" id="c4G"></div>';
+  const g=$('c4G');
+  for(let r=0;r<R;r++)for(let c=0;c<C;c++){
+    const v=gstate[r*C+c];
+    const b=document.createElement('button');
+    b.innerHTML=v?`<span class="d ${v===1?'p1':'p2'}"></span>`:'';
+    b.disabled=gover;b.onclick=()=>dropC4(c);g.appendChild(b);
+  }
+}
+function freeRow(c){for(let r=R-1;r>=0;r--)if(!gstate[r*C+c])return r;return -1;}
+function win4(b,p){
+  const at=(r,c)=>(r<0||r>=R||c<0||c>=C)?-1:b[r*C+c];
+  for(let r=0;r<R;r++)for(let c=0;c<C;c++)
+    for(const[dr,dc]of[[0,1],[1,0],[1,1],[1,-1]]){
+      let n=0;for(let k=0;k<4;k++)if(at(r+dr*k,c+dc*k)===p)n++;
+      if(n===4)return true;
+    }
+  return false;
+}
+function dropC4(c){
+  if(gover)return;
+  let r=freeRow(c);if(r<0)return toast('Column full');
+  gstate[r*C+c]=1;
+  if(win4(gstate,1)){gover=true;say('You win.');return drawC4();}
+  if(!gstate.includes(0)){gover=true;say('Draw.');return drawC4();}
+  aiC4();
+  if(win4(gstate,2)){gover=true;say('You lost.');}
+  else if(!gstate.includes(0)){gover=true;say('Draw.');}
+  drawC4();
+}
+function aiC4(){
+  const tryCol=p=>{
+    for(let c=0;c<C;c++){const r=freeRow(c);if(r<0)continue;
+      gstate[r*C+c]=p;const w=win4(gstate,p);gstate[r*C+c]=0;if(w)return c;}
+    return -1;
+  };
+  let c=tryCol(2);if(c<0)c=tryCol(1);
+  if(c<0){const order=[3,2,4,1,5,0,6].filter(x=>freeRow(x)>=0);c=order[0];}
+  const r=freeRow(c);if(r>=0)gstate[r*C+c]=2;
+}
+
+/* ── memory match ── */
+function initMem(){
+  const faces=[...'🐻🍕🚀⭐🐸🎈🍣🐙'];
+  const deck=[...faces,...faces].sort(()=>Math.random()-.5);
+  gstate={deck,up:[],done:[],moves:0,lock:false};gover=false;
+  say('Find all 8 pairs.');drawMem();
+}
+function drawMem(){
+  const w=$('gameBoard');w.innerHTML='<div class="mem" id="memG"></div>';
+  const g=$('memG');
+  gstate.deck.forEach((f,i)=>{
+    const shown=gstate.up.includes(i)||gstate.done.includes(i);
+    const b=document.createElement('button');
+    b.textContent=shown?f:'';
+    b.className=gstate.done.includes(i)?'done':(shown?'up':'');
+    b.disabled=shown||gstate.lock;
+    b.onclick=()=>flip(i);g.appendChild(b);
+  });
+  $('gstat').textContent=gover?gresult:`Moves: ${gstate.moves}`;
+}
+function flip(i){
+  if(gstate.lock||gstate.up.includes(i))return;
+  gstate.up.push(i);
+  if(gstate.up.length===2){
+    gstate.moves++;gstate.lock=true;drawMem();
+    const[a,b]=gstate.up;
+    setTimeout(()=>{
+      if(gstate.deck[a]===gstate.deck[b])gstate.done.push(a,b);
+      gstate.up=[];gstate.lock=false;
+      if(gstate.done.length===16){gover=true;say(`Cleared in ${gstate.moves} moves.`);}
+      drawMem();
+    },RM?150:620);
+  }else drawMem();
+}
+
+/* ── rock paper scissors ── */
+const RPS=['✊','✋','✌️'];
+function initRPS(){gstate={me:0,ai:0,hist:[],last:['','']};gover=false;say('First to 3.');drawRPS();}
+function drawRPS(){
+  const w=$('gameBoard');
+  w.innerHTML=`<div class="rpsview">
+      <span>${gstate.last[0]||'❔'}<small>YOU</small></span>
+      <span>${gstate.last[1]||'❔'}<small>GIM</small></span></div>
+    <div class="rps" id="rpsG"></div>
+    <div class="score">You ${gstate.me} · Gim ${gstate.ai}</div>`;
+  const g=$('rpsG');
+  RPS.forEach((r,i)=>{const b=document.createElement('button');b.textContent=r;
+    b.disabled=gover;b.onclick=()=>throwRPS(i);g.appendChild(b);});
+}
+function throwRPS(i){
+  if(gover)return;
+  const counts=[0,0,0];gstate.hist.forEach(h=>counts[h]++);
+  const fav=counts.indexOf(Math.max(...counts));
+  const ai=gstate.hist.length>=3&&Math.random()<.65?(fav+1)%3:Math.floor(Math.random()*3);
+  gstate.hist.push(i);gstate.last=[RPS[i],RPS[ai]];
+  if(i!==ai)((i+1)%3===ai)?gstate.ai++:gstate.me++;
+  if(gstate.me===3){gover=true;say('You win the set.');}
+  else if(gstate.ai===3){gover=true;say('Gim wins the set.');}
+  else say(i===ai?'Tie.':(((i+1)%3===ai)?'Gim takes it.':'You take it.'));
+  drawRPS();
+}
+/* ══ voice ══ */
+let recT=null,recS=0;
+function recToggle(){
+  $('recBar').classList.add('on');recS=0;$('recTime').textContent='0:00';
+  recT=setInterval(()=>{recS++;
+    $('recTime').textContent=Math.floor(recS/60)+':'+String(recS%60).padStart(2,'0');},1000);
+}
+function recStop(){clearInterval(recT);$('recBar').classList.remove('on');}
+function recCancel(){recStop();toast('Recording discarded');}
+function recSend(){
+  const d=Math.floor(recS/60)+':'+String(recS%60).padStart(2,'0');
+  recStop();push({who:'me',voice:d||'0:01'});toast('Voice message sent');reply();
+}
+/* ══ call ══ */
+let callT=null,callS=0;
+function startCall(kind){
+  callS=0;$('callStatus').textContent=kind==='video'?'Video calling…':'Calling…';
+  go('call');
+  setTimeout(()=>{
+    callT=setInterval(()=>{callS++;
+      $('callStatus').textContent=Math.floor(callS/60)+':'+String(callS%60).padStart(2,'0');},1000);
+  },RM?200:1800);
+}
+function toggleCall(k,btn){btn.classList.toggle('on');toast(k+(btn.classList.contains('on')?' on':' off'));}
+function endCall(){
+  clearInterval(callT);
+  if(callS)push({who:'me',text:`📞 Call ended · ${Math.floor(callS/60)}:${String(callS%60).padStart(2,'0')}`});
+  go('chat');
+}
+/* ══ settings ══ */
+function toggleSetting(){
+  stripOn=!stripOn;$('tgStrip').setAttribute('aria-checked',stripOn);
+  if(!stripOn)sel.clear();stripState();renderRail();paint();
+  toast(stripOn?'Recent photos on':'Recent photos hidden — use ⊕ › All photos');
+}
+function toggleHide(){hideAfter=!hideAfter;$('tgHide').setAttribute('aria-checked',hideAfter);}
+
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheets();});
+renderConvs();render();renderRail();buildRest();buildEmoji();buildGifs();buildStickers();
+buildFiles();buildPad();buildGameList();qrState();stripState();paint();
+</script>
+</body>
+</html>
